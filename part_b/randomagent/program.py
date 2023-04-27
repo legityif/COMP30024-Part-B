@@ -3,6 +3,7 @@
 
 BOARD_SIZE = 7
 
+import random
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
 
@@ -19,8 +20,8 @@ class Agent:
         Initialise the agent.
         """
         self._color = color
-        self._board = []
-        # self._board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+        # self._board = []
+        self._board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         match color:
             case PlayerColor.RED:
                 print("Testing: RandomAgent is playing as red")
@@ -33,19 +34,11 @@ class Agent:
         """
         match self._color:
             case PlayerColor.RED:
-                # get all possible moves based on current board 
-                # use a random function to get a random move based on board 
-                # return this move
-                self.generate_moves(self._board)
-                return SpawnAction(HexPos(1, 1))
-                # return SpreadAction(HexPos(3, 3), HexDir.Up)
+                possible_moves = self.generate_moves()
+                return self.randomMove(possible_moves)
             case PlayerColor.BLUE:
-                # get all possible moves based on current board 
-                # use a random function to get a random move based on board 
-                # return this move
-                self.generate_moves(self._board)
-                return SpawnAction(HexPos(1, 1))
-                # return SpreadAction(HexPos(3, 3), HexDir.Up)
+                possible_moves = self.generate_moves()
+                return self.randomMove(possible_moves)
 
     def turn(self, color: PlayerColor, action: Action, **referee: dict):
         """
@@ -55,25 +48,44 @@ class Agent:
             case SpawnAction(cell):
                 # for both agent colours, add to board 
                 if PlayerColor.RED == color:
-                    self._board.append((color, action, cell))
+                    self._board[cell.r][cell.q] = (color, 1)
                     pass
                 if PlayerColor.BLUE == color:
-                    self._board.append((color, action, cell))
+                    self._board[cell.r][cell.q] = (color, 1)
                     pass
             case SpreadAction(cell, direction):
                 # for both agent colours, add to board 
                 if PlayerColor.RED == color:
-                    self._board.append((color, action, cell))
+                    self._board[cell.r][cell.q] = (color, 1)
                     pass
                 if PlayerColor.BLUE == color:
-                    self._board.append((color, action, cell))
+                    self._board[cell.r][cell.q] = (color, 1)
                     pass
+                
+    def randomMove(self, possible_moves):
+        rand_move = random.randint(0, len(possible_moves))
+        return possible_moves[rand_move]
 
-    def generate_moves(self, _board):
-        print([(col, action, pos) for col, action, pos in _board] if len(self._board)!=0 else "NO MYPLAYER MOVES YET")
-        for col, action, pos in self._board:
-            if PlayerColor == col:
-                pass
+    def generate_moves(self):
+        print("\n")
+        print(self._board)
+        print("\n")
+        possible_moves = []
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if self._board[i][j] is None:
+                    possible_moves.append(SpawnAction(HexPos(i, j)))
+                else:
+                    if self._board[i][j][0] == self._color:
+                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.Up))
+                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.UpLeft))
+                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.UpRight))
+                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.Down))
+                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.DownRight))
+                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.DownLeft))
+                    else:
+                        continue 
+        return possible_moves
                 
 
     
