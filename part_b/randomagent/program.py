@@ -6,7 +6,7 @@ BOARD_SIZE = 7
 import random
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
-
+DIRECTIONS = (HexDir.Up, HexDir.UpLeft, HexDir.UpRight, HexDir.Down, HexDir.DownLeft, HexDir.DownRight)
 
 # This is the entry point for your game playing agent. Currently the agent
 # simply spawns a token at the centre of the board if playing as RED, and
@@ -54,35 +54,54 @@ class Agent:
                     self._board[cell.r][cell.q] = (color, 1)
                     pass
             case SpreadAction(cell, direction):
-                # for both agent colours, add to board 
+                orig_cell = cell
                 if PlayerColor.RED == color:
-                    self._board[cell.r][cell.q] = (color, 1)
+                    # call spread to update board
+                    self.spreadInDir(direction, cell, orig_cell, self._board[cell.r][cell.q][1], color)
                     pass
                 if PlayerColor.BLUE == color:
-                    self._board[cell.r][cell.q] = (color, 1)
+                    # call spread to update board
+                    self.spreadInDir(direction, cell, orig_cell, self._board[cell.r][cell.q][1], color)
                     pass
-                
+    
+    def spreadInDir(self, direction, cell, orig_cell, power, colour):
+        while power>0:
+            new_cell = HexPos(cell.r, cell.q) + direction
+            if self._board[new_cell.r][new_cell.q]==None:
+                self._board[new_cell.r][new_cell.q] = (colour, 1)
+            else:
+                if self._board[new_cell.r][new_cell.q][1]+1 > 6:
+                    self._board[new_cell.r][new_cell.q] = None
+                else:
+                    self._board[new_cell.r][new_cell.q] = (colour, self._board[new_cell.r][new_cell.q][1]+1)
+            cell = new_cell
+            power-=1
+        self._board[orig_cell.r][orig_cell.q] = None
+        cell = orig_cell
+    
     def randomMove(self, possible_moves):
-        rand_move = random.randint(0, len(possible_moves))
+        rand_move = random.randint(0, len(possible_moves)-1)
         return possible_moves[rand_move]
 
-    def generate_moves(self):
-        print("\n")
-        print(self._board)
-        print("\n")
-        possible_moves = []
+    def validTotalBoardPower(self):
+        power = 0
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
-                if self._board[i][j] is None:
-                    possible_moves.append(SpawnAction(HexPos(i, j)))
+                if self._board[i][j] is not None:
+                    power += self._board[i][j][1]
+        return power<49
+    
+    def generate_moves(self):
+        possible_moves = []
+        validBoard = self.validTotalBoardPower()
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if validBoard and self._board[i][j] is None:
+                    possible_moves.append(SpawnAction(HexPos(i, j))) 
                 else:
-                    if self._board[i][j][0] == self._color:
-                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.Up))
-                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.UpLeft))
-                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.UpRight))
-                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.Down))
-                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.DownRight))
-                        possible_moves.append(SpreadAction(HexPos(i, j), HexDir.DownLeft))
+                    if self._board[i][j] is not None and self._board[i][j][0] == self._color:
+                        for d in DIRECTIONS:
+                            possible_moves.append(SpreadAction(HexPos(i, j), d))
                     else:
                         continue 
         return possible_moves
