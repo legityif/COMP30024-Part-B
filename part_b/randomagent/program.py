@@ -1,6 +1,8 @@
 # COMP30024 Artificial Intelligence, Semester 1 2023
 # Project Part B: Game Playing Agent
 
+BOARD_SIZE = 7
+
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
 
@@ -18,6 +20,7 @@ class Agent:
         """
         self._color = color
         self._board = []
+        # self._board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         match color:
             case PlayerColor.RED:
                 print("Testing: RandomAgent is playing as red")
