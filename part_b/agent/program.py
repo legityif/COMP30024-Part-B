@@ -2,7 +2,7 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-MINIMAX_DEPTH = 5
+MINIMAX_DEPTH = 3
 
 from collections import deque
 import math
@@ -94,18 +94,14 @@ class Agent:
                 return self.best_move(self._state, self._color) 
             
     def minimax(self, state, depth, max_depth, player):
-        # print("curr depth: " + str(depth))
+        # print("curr depth: " + str(depth) + " color=" + str(player))
         if state.reachedTerminal() or depth==max_depth:
-            return self.eval_fn(state, player)
-
+            return self.eval_fn(state)
         is_maximising = (player == self._color)
         best_score = -1e8 if is_maximising else 1e8
         moves = self.generate_moves(player, state)
         for move in moves:
-            # print(move)
-            # print(state._board)
             new_state = self.applyMovetoBoard(state, move, player)
-            # print(new_state._board)
             score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color)
             if is_maximising:
                 best_score = max(best_score, score)
@@ -118,34 +114,18 @@ class Agent:
         best_moves = []
         moves = self.generate_moves(player, state)
         for move in moves:
+            # print(move)
             new_state = self.applyMovetoBoard(state, move, player)
-            score = self.minimax(new_state, 0, MINIMAX_DEPTH, self._enemy if player == self._color else self._color)
-            if player == self._color:
-                if score > best_score:  # update best_score
-                    best_score = score
-                    best_moves = [move]  # reset best_moves
-                elif score == best_score:  # append to best_moves
-                    best_moves.append(move)
-            else:
-                if score < best_score:  # update best_score
-                    best_score = score
-                    best_moves = [move]  # reset best_moves
-                elif score == best_score:  # append to best_moves
-                    best_moves.append(move)
+            score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy)
+            if score > best_score:  # update best_score
+                best_score = score
+                best_moves = [move]  # reset best_moves
+            elif score == best_score:  # append to best_moves
+                best_moves.append(move)
         if len(best_moves) == 0:
             return None
         else:
-            return random.choice(best_moves)
-    
-    def eval_fn(self, state, player):
-        enemy_power = 0
-        board = state._board
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c] is not None:
-                    if board[r][c][0]!=player:
-                        enemy_power += board[r][c][1]
-        return 1.0/enemy_power if enemy_power!=0 else 0       
+            return random.choice(best_moves)   
     
     def distance(self, x1, y1, x2, y2):
         return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -241,26 +221,15 @@ class Agent:
                 totalExpanded += 1
         return totalExpanded
     
-    # def eval_fn(self, state, player):
-    #     player_power = 0
-    #     enemy_power = 0
-    #     min_dist = 0
-    #     board = state._board
-    #     player_coords = []
-    #     enemy_coords = []
-    #     distance_to_enemies = []
-    #     for r in range(BOARD_SIZE):
-    #         for c in range(BOARD_SIZE):
-    #             if board[r][c] is not None:
-    #                 if board[r][c][0]==player:
-    #                     player_coords.append([r, c])
-    #                     player_power += board[r][c][1]
-    #                 else:
-    #                     enemy_coords.append([r, c])
-    #                     enemy_power += board[r][c][1]
-    #     if player_coords and enemy_coords:
-    #         for p_coord in player_coords:
-    #             for e_coord in enemy_coords:
-    #                 distance_to_enemies.append(self.distance(e_coord[0], e_coord[1], p_coord[0], p_coord[1]))
-    #         min_dist = min(distance_to_enemies)
-    #     return 0.5*(player_power - enemy_power)-0.5*min_dist
+    def eval_fn(self, state):
+        player_power = 0
+        enemy_power = 0
+        board = state._board
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0]==self._color:
+                        player_power += board[r][c][1]
+                    else:
+                        enemy_power += board[r][c][1]
+        return (player_power - enemy_power)
