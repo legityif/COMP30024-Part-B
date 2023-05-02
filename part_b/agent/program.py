@@ -4,9 +4,7 @@
 BOARD_SIZE = 7
 MINIMAX_DEPTH = 2
 
-from collections import deque
-import math
-import random
+import random, math
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
 DIRECTIONS = (HexDir.Up, HexDir.UpLeft, HexDir.UpRight, HexDir.Down, HexDir.DownLeft, HexDir.DownRight)
@@ -93,30 +91,36 @@ class Agent:
                 self._turn += 1 
                 return self.best_move(self._state, self._color) 
             
-    def minimax(self, state, depth, max_depth, player):
+    def minimax(self, state, depth, max_depth, player, alpha, beta):
         # print("curr depth: " + str(depth) + " color=" + str(player))
         if state.reachedTerminal() or depth==max_depth:
             return self.eval_fn(state)
         is_maximising = (player == self._color)
         best_score = -1e8 if is_maximising else 1e8
-        moves = self.generate_moves(player, state)
+        moves = self.generate_ordered_moves(player, state)
         for move in moves:
             new_state = self.applyMovetoBoard(state, move, player)
-            score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color)
+            score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta)
             if is_maximising:
                 best_score = max(best_score, score)
+                alpha = max(alpha, best_score)
+                if alpha>=beta:
+                    break
             else:
                 best_score = min(best_score, score)
+                beta = min(beta, best_score)
+                if beta>=alpha:
+                    break
         return best_score
 
     def best_move(self, state, player):
         best_score = -1e8 if player == self._color else 1e8
         best_moves = []
-        moves = self.generate_moves(player, state)
+        moves = self.generate_ordered_moves(player, state)
         for move in moves:
             # print(move)
             new_state = self.applyMovetoBoard(state, move, player)
-            score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy)
+            score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
             if score > best_score:  # update best_score
                 best_score = score
                 best_moves = [move]  # reset best_moves
@@ -125,12 +129,73 @@ class Agent:
         if len(best_moves) == 0:
             return None
         else:
-            return random.choice(best_moves)   
+            return best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
+        
+    # def eval_fn(self, state):
+    #     # consider player power compared to enemy power after a move
+    #     player_power, enemy_power = 0, 0
+    #     board = state._board
+    #     for r in range(BOARD_SIZE):
+    #         for c in range(BOARD_SIZE):
+    #             if board[r][c] is not None:
+    #                 if board[r][c][0]==self._color:
+    #                     player_power += board[r][c][1]
+    #                 else:
+    #                     enemy_power += board[r][c][1]
+    #     # consider how many moves you can make compared to enemy
+    #     mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
+    #     return 0.98*(player_power - enemy_power)+0.02*mobility_diff
     
-    def distance(self, x1, y1, x2, y2):
-        return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
+    def eval_fn(self, state):
+        # consider player power compared to enemy power after a move
+        player_power, enemy_power = 0, 0
+        board = state._board
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0] == self._color:
+                        player_power += board[r][c][1]
+                    else:
+                        enemy_power += board[r][c][1]
+        # consider how many moves you can make compared to enemy
+        mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
+        spawn_mobility_diff = len(self.generate_spawns(self._color, state)) - len(self.generate_spawns(self._enemy, state))
+        print(0.94*(player_power - enemy_power), 0.01*(mobility_diff), 0.05*(spawn_mobility_diff))
+        return 0.94*(player_power - enemy_power) + 0.01*(mobility_diff) + 0.05*(spawn_mobility_diff)
+
+    def generate_spawns(self, player, state):
+        board = state._board
+        # check for spawn moves within capture zone of enemy cell
+        valid_spawns = []
+        enemy_cells = []
+        # enemy_cells = [cell for row in board for cell in row if cell is not None and cell[0] == self._enemy]
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0]!=player:
+                        enemy_cells.append((HexPos(r, c), board[r][c][1]))
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is None:
+                    pos = HexPos(r, c)
+                    if any(self.dist(pos, enemy_cell[0]) <= enemy_cell[1] for enemy_cell in enemy_cells):
+                        continue
+                    valid_spawns.append(pos)
+        spawn_moves = [SpawnAction(pos) for pos in valid_spawns]
+        return spawn_moves
     
-    def generate_moves(self, player, state):
+    def dist(self, cell1, cell2):
+        board_size = BOARD_SIZE
+        dx = abs(cell1.q - cell2.q)
+        dy = abs(cell1.r - cell2.r)
+        if dx > board_size / 2:
+            dx = board_size - dx
+        if dy > board_size / 2:
+            dy = board_size - dy
+        d = math.sqrt(dx ** 2 + dy ** 2)
+        return board_size - d if dx == 0 or dy == 0 or dx == dy else d
+
+    def generate_ordered_moves(self, player, state):
         possible_moves = []
         validBoard = state.validTotalBoardPower()
         for i in range(BOARD_SIZE):
@@ -143,7 +208,12 @@ class Agent:
                             possible_moves.append(SpreadAction(HexPos(i, j), d))
                     else:
                         continue 
-        return possible_moves
+        moves_with_eval = []
+        for move in possible_moves:
+            new_state = self.applyMovetoBoard(state, move, player)
+            moves_with_eval.append([move, self.eval_fn(new_state)])
+        sorted_moves = sorted(moves_with_eval, key=lambda x: x[1], reverse=True)
+        return [move[0] for move in sorted_moves]
         
     def applyMovetoBoard(self, state, action, maximising_player):
         new_state = boardState(maximising_player, self._turn, state._board)
@@ -180,56 +250,18 @@ class Agent:
             power-=1
         board[orig_cell.r][orig_cell.q] = None
         cell = orig_cell
-
-    def heuristic_infinite_spread(self, board, enemy_player):
-        """
-        Since a red cell has to be one the same "line" as a blue cell (where a line is the straight line connecting the red and blue cell)
-        in order to take over the blue cell, we can find the minimum number of lines that it takes to connect all the blue cells. 
-        Where two blue cells are considered to be on the same "line" if they are connected in a straight line, in either the x, y, or z direction.
-        """
-
-        # first put all the blue cells into a queue
-        queue = deque()
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c]:
-                    if board[r][c][0]==enemy_player:
-                        queue.append((r, c))
-        
-        # Keep track of the marked row, column, and diagonals
-        visited = {"r0": False, "r1": False, "r2": False, "r3": False, "r4": False, "r5": False, "r6": False,
-                "c0": False, "c1": False, "c2": False, "c3": False, "c4": False, "c5": False, "c6": False,
-                "d0": False, "d1": False, "d2": False, "d3": False, "d4": False, "d5": False, "d6": False}
-        totalExpanded = 0
-        
-        while(queue):
-            r, c = queue.popleft()
-            # check if this cell has already been marked on the corresponding row, col, or diagonal
-            # sum of 7 --> diagonal 0, sum of 10 --> diagonal 3, sum of 11 --> diagonal 4, sum of 12 --> diagonal 5
-            # if r+c = n, where n < 7, then n is the diagonal number, otherwise, modulo it with 7   
-            row = "r" + str(r)
-            col = "c" + str(c)
-            diag = "d" + str((r+c)%BOARD_SIZE)
-
-            if visited[row]==True or visited[col]==True or visited[diag]==True:
-                continue
-            else:
-                # this cell is not on a marked line, we need to spread it in all 3 directions (mark all lines as visited)
-                visited[row] = True
-                visited[col] = True
-                visited[diag] = True
-                totalExpanded += 1
-        return totalExpanded
     
-    def eval_fn(self, state):
-        player_power = 0
-        enemy_power = 0
-        board = state._board
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c] is not None:
-                    if board[r][c][0]==self._color:
-                        player_power += board[r][c][1]
+    def generate_moves(self, player, state):
+        possible_moves = []
+        validBoard = state.validTotalBoardPower()
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if validBoard and state._board[i][j] is None and state._turn!=343:
+                    possible_moves.append(SpawnAction(HexPos(i, j))) 
+                else:
+                    if state._board[i][j] is not None and state._board[i][j][0]==player and state._turn!=343:
+                        for d in DIRECTIONS:
+                            possible_moves.append(SpreadAction(HexPos(i, j), d))
                     else:
-                        enemy_power += board[r][c][1]
-        return (player_power - enemy_power)
+                        continue 
+        return possible_moves
