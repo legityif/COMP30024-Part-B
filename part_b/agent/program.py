@@ -2,7 +2,7 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-MINIMAX_DEPTH = 3
+MINIMAX_DEPTH = 2
 
 from collections import deque
 import math
@@ -181,7 +181,7 @@ class Agent:
         board[orig_cell.r][orig_cell.q] = None
         cell = orig_cell
 
-    def heuristic_infinite_spread(self, board, maximising_player):
+    def heuristic_infinite_spread(self, board, enemy_player):
         """
         Since a red cell has to be one the same "line" as a blue cell (where a line is the straight line connecting the red and blue cell)
         in order to take over the blue cell, we can find the minimum number of lines that it takes to connect all the blue cells. 
@@ -193,7 +193,7 @@ class Agent:
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 if board[r][c]:
-                    if board[r][c][0]==maximising_player:
+                    if board[r][c][0]==enemy_player:
                         queue.append((r, c))
         
         # Keep track of the marked row, column, and diagonals
