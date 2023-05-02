@@ -18,7 +18,6 @@ class boardState:
         else:
             boardcopy = [row[:] for row in board]
             self._board = boardcopy
-            pass
         self._color = color
         self._turn = turn
     
@@ -29,21 +28,6 @@ class boardState:
                 if self._board[i][j] is not None:
                     power += self._board[i][j][1]
         return power<49
-    
-    def generate_moves(self):
-        possible_moves = []
-        validBoard = self.validTotalBoardPower()
-        for i in range(BOARD_SIZE):
-            for j in range(BOARD_SIZE):
-                if validBoard and self._board[i][j] is None and self._turn!=343:
-                    possible_moves.append(SpawnAction(HexPos(i, j))) 
-                else:
-                    if self._board[i][j] is not None and self._board[i][j][0] == self._color and self._turn!=343:
-                        for d in DIRECTIONS:
-                            possible_moves.append(SpreadAction(HexPos(i, j), d))
-                    else:
-                        continue 
-        return possible_moves
     
     def reachedTerminal(self):
         player, enemy = 0, 0
@@ -111,19 +95,18 @@ class Agent:
             
     def minimax(self, state, depth, max_depth, player):
         # print("curr depth: " + str(depth))
-        if state.reachedTerminal() or depth==0:
-            # print(self.eval_fn(state, player))
+        if state.reachedTerminal() or depth==max_depth:
             return self.eval_fn(state, player)
 
         is_maximising = (player == self._color)
         best_score = -1e8 if is_maximising else 1e8
-        moves = state.generate_moves()
+        moves = self.generate_moves(player, state)
         for move in moves:
             # print(move)
             # print(state._board)
-            new_state = self.applyMovetoBoard(boardState(player, state._turn + 1, state._board) , move, player)
+            new_state = self.applyMovetoBoard(state, move, player)
             # print(new_state._board)
-            score = self.minimax(new_state, depth-1, max_depth, self._enemy if player == self._color else self._color)
+            score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color)
             if is_maximising:
                 best_score = max(best_score, score)
             else:
@@ -133,10 +116,10 @@ class Agent:
     def best_move(self, state, player):
         best_score = -1e8 if player == self._color else 1e8
         best_moves = []
-        moves = state.generate_moves()
+        moves = self.generate_moves(player, state)
         for move in moves:
-            new_state = self.applyMovetoBoard(boardState(player, state._turn + 1, state._board) , move, player)
-            score = self.minimax(new_state, MINIMAX_DEPTH, MINIMAX_DEPTH, self._enemy if player == self._color else self._color)
+            new_state = self.applyMovetoBoard(state, move, player)
+            score = self.minimax(new_state, 0, MINIMAX_DEPTH, self._enemy if player == self._color else self._color)
             if player == self._color:
                 if score > best_score:  # update best_score
                     best_score = score
@@ -166,9 +149,24 @@ class Agent:
     
     def distance(self, x1, y1, x2, y2):
         return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
+    
+    def generate_moves(self, player, state):
+        possible_moves = []
+        validBoard = state.validTotalBoardPower()
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if validBoard and state._board[i][j] is None and state._turn!=343:
+                    possible_moves.append(SpawnAction(HexPos(i, j))) 
+                else:
+                    if state._board[i][j] is not None and state._board[i][j][0]==player and state._turn!=343:
+                        for d in DIRECTIONS:
+                            possible_moves.append(SpreadAction(HexPos(i, j), d))
+                    else:
+                        continue 
+        return possible_moves
         
     def applyMovetoBoard(self, state, action, maximising_player):
-        new_state = boardState(maximising_player, self._turn, state._board.copy())
+        new_state = boardState(maximising_player, self._turn, state._board)
         new_board = new_state._board
         match action:
             case SpawnAction(cell):
