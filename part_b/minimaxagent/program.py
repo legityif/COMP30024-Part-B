@@ -5,8 +5,6 @@ BOARD_SIZE = 7
 MINIMAX_DEPTH = 5
 
 from collections import deque
-import math
-import random
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
 DIRECTIONS = (HexDir.Up, HexDir.UpLeft, HexDir.UpRight, HexDir.Down, HexDir.DownLeft, HexDir.DownRight)
@@ -31,14 +29,16 @@ class boardState:
         return power<49
     
     def generate_moves(self):
+        if self.reachedTerminal():
+            return []
         possible_moves = []
         validBoard = self.validTotalBoardPower()
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
-                if validBoard and self._board[i][j] is None and self._turn!=343:
+                if validBoard and self._board[i][j] is None:
                     possible_moves.append(SpawnAction(HexPos(i, j))) 
                 else:
-                    if self._board[i][j] is not None and self._board[i][j][0] == self._color and self._turn!=343:
+                    if self._board[i][j] is not None and self._board[i][j][0] == self._color:
                         for d in DIRECTIONS:
                             possible_moves.append(SpreadAction(HexPos(i, j), d))
                     else:
@@ -109,64 +109,61 @@ class Agent:
                 self._turn += 1 
                 return self.best_move(self._state, self._color) 
             
-    def minimax(self, state, depth, max_depth, player):
-        # print("curr depth: " + str(depth))
-        if state.reachedTerminal() or depth==0:
-            # print(self.eval_fn(state, player))
-            return self.eval_fn(state, player)
-
-        is_maximising = (player == self._color)
+    
+    def minimax(self, state, depth, max_depth, is_maximising, maximising_player):
+        if state.reachedTerminal() or depth == max_depth:
+            return self.eval_fn(state, maximising_player)
         best_score = -1e8 if is_maximising else 1e8
         moves = state.generate_moves()
         for move in moves:
-            # print(move)
-            # print(state._board)
-            new_state = self.applyMovetoBoard(boardState(player, state._turn + 1, state._board) , move, player)
-            # print(new_state._board)
-            score = self.minimax(new_state, depth-1, max_depth, self._enemy if player == self._color else self._color)
+            new_state = boardState(self._enemy if maximising_player == self._color else self._color, state._turn + 1, state._board)
+            self.applyMovetoBoard(new_state, move, maximising_player)
+            score = self.minimax(new_state, depth - 1, max_depth, not is_maximising, maximising_player)
             if is_maximising:
                 best_score = max(best_score, score)
             else:
                 best_score = min(best_score, score)
         return best_score
-
-    def best_move(self, state, player):
-        best_score = -1e8 if player == self._color else 1e8
-        best_moves = []
+    
+    def best_move(self, state, maximising_player):
+        best_score = -1e8 if maximising_player==self._color else 1e8
+        best_move = None
         moves = state.generate_moves()
         for move in moves:
-            new_state = self.applyMovetoBoard(boardState(player, state._turn + 1, state._board) , move, player)
-            score = self.minimax(new_state, MINIMAX_DEPTH, MINIMAX_DEPTH, self._enemy if player == self._color else self._color)
-            if player == self._color:
-                if score > best_score:  # update best_score
-                    best_score = score
-                    best_moves = [move]  # reset best_moves
-                elif score == best_score:  # append to best_moves
-                    best_moves.append(move)
+            new_state = boardState(self._color, state._turn + 1, state._board)  
+            self.applyMovetoBoard(new_state, move, maximising_player)
+            if maximising_player==self._color:
+                score = self.minimax(new_state, MINIMAX_DEPTH, MINIMAX_DEPTH, True, self._color)
             else:
-                if score < best_score:  # update best_score
+                score = self.minimax(new_state, MINIMAX_DEPTH, MINIMAX_DEPTH, False, self._enemy)
+            if self._color == maximising_player:
+                if score > best_score:
                     best_score = score
-                    best_moves = [move]  # reset best_moves
-                elif score == best_score:  # append to best_moves
-                    best_moves.append(move)
-        if len(best_moves) == 0:
-            return None
-        else:
-            return random.choice(best_moves)
+                    best_move = move
+            else:
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+        return best_move
     
-    def eval_fn(self, state, player):
-        enemy_power = 0
+    def eval_fn(self, state, maximising_player):
+        score = 0
         board = state._board
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 if board[r][c] is not None:
-                    if board[r][c][0]!=player:
-                        enemy_power += board[r][c][1]
-        return 1.0/enemy_power if enemy_power!=0 else 0       
+                    if board[r][c][0]==self._color:
+                        if self._color == maximising_player:
+                            score += (board[r][c][1] + self.heuristic_infinite_spread(board, maximising_player))
+                        else:
+                            score -= (board[r][c][1] + self.heuristic_infinite_spread(board, maximising_player))
+                    else:
+                        if self._color == maximising_player:
+                            score += (board[r][c][1] + self.heuristic_infinite_spread(board, maximising_player))
+                        else:
+                            score -= (board[r][c][1] + self.heuristic_infinite_spread(board, maximising_player))          
+        return score
     
-    def distance(self, x1, y1, x2, y2):
-        return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
-        
     def applyMovetoBoard(self, state, action, maximising_player):
         new_state = boardState(maximising_player, self._turn, state._board.copy())
         new_board = new_state._board
@@ -175,18 +172,20 @@ class Agent:
                 # for both agent colours, add to board 
                 if PlayerColor.RED == maximising_player:
                     new_board[cell.r][cell.q] = (maximising_player, 1)
+                    return new_state
                 if PlayerColor.BLUE == maximising_player:
                     new_board[cell.r][cell.q] = (maximising_player, 1)
-                return new_state
+                    return new_state
             case SpreadAction(cell, direction):
                 orig_cell = cell
                 if PlayerColor.RED == maximising_player:
                     # call spread to update board
                     self.spreadInDir(new_board, direction, cell, orig_cell, new_board[cell.r][cell.q][1], maximising_player)
+                    return new_state
                 if PlayerColor.BLUE == maximising_player:
                     # call spread to update board
                     self.spreadInDir(new_board, direction, cell, orig_cell, new_board[cell.r][cell.q][1], maximising_player)
-                return new_state
+                    return new_state
     
     def spreadInDir(self, board, direction, cell, orig_cell, power, colour):
         while power>0:
@@ -242,27 +241,3 @@ class Agent:
                 visited[diag] = True
                 totalExpanded += 1
         return totalExpanded
-    
-    # def eval_fn(self, state, player):
-    #     player_power = 0
-    #     enemy_power = 0
-    #     min_dist = 0
-    #     board = state._board
-    #     player_coords = []
-    #     enemy_coords = []
-    #     distance_to_enemies = []
-    #     for r in range(BOARD_SIZE):
-    #         for c in range(BOARD_SIZE):
-    #             if board[r][c] is not None:
-    #                 if board[r][c][0]==player:
-    #                     player_coords.append([r, c])
-    #                     player_power += board[r][c][1]
-    #                 else:
-    #                     enemy_coords.append([r, c])
-    #                     enemy_power += board[r][c][1]
-    #     if player_coords and enemy_coords:
-    #         for p_coord in player_coords:
-    #             for e_coord in enemy_coords:
-    #                 distance_to_enemies.append(self.distance(e_coord[0], e_coord[1], p_coord[0], p_coord[1]))
-    #         min_dist = min(distance_to_enemies)
-    #     return 0.5*(player_power - enemy_power)-0.5*min_dist
