@@ -2,9 +2,10 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-MINIMAX_DEPTH = 2
+MINIMAX_DEPTH = 3
+LATE_GAME = 50
 
-import random, math
+import random, math, copy
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
 DIRECTIONS = (HexDir.Up, HexDir.UpLeft, HexDir.UpRight, HexDir.Down, HexDir.DownLeft, HexDir.DownRight)
@@ -92,12 +93,13 @@ class Agent:
                 return self.best_move(self._state, self._color) 
             
     def minimax(self, state, depth, max_depth, player, alpha, beta):
-        # print("curr depth: " + str(depth) + " color=" + str(player))
         if state.reachedTerminal() or depth==max_depth:
-            return self.eval_fn(state)
+            # print("curr depth: " + str(depth) + " terminal=" + str(state.reachedTerminal()) + " player: " + str(player) + " eval: " + str(self.adv_eval_fn(state)))
+            return self.power_eval_fn(state)
         is_maximising = (player == self._color)
+        # print("curr depth: " + str(depth) + " terminal=" + str(state.reachedTerminal()) + " player: " + str(player) + " eval: " + str(self.adv_eval_fn(state)))
         best_score = -1e8 if is_maximising else 1e8
-        moves = self.generate_ordered_moves(player, state)
+        moves = self.generate_moves(player, state)
         for move in moves:
             new_state = self.applyMovetoBoard(state, move, player)
             score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta)
@@ -114,11 +116,10 @@ class Agent:
         return best_score
 
     def best_move(self, state, player):
-        best_score = -1e8 if player == self._color else 1e8
+        best_score = -1e8
         best_moves = []
-        moves = self.generate_ordered_moves(player, state)
+        moves = self.generate_moves(player, state)
         for move in moves:
-            # print(move)
             new_state = self.applyMovetoBoard(state, move, player)
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
             if score > best_score:  # update best_score
@@ -127,26 +128,13 @@ class Agent:
             elif score == best_score:  # append to best_moves
                 best_moves.append(move)
         if len(best_moves) == 0:
+            print("error no best move")
             return None
         else:
-            return best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
-        
-    # def eval_fn(self, state):
-    #     # consider player power compared to enemy power after a move
-    #     player_power, enemy_power = 0, 0
-    #     board = state._board
-    #     for r in range(BOARD_SIZE):
-    #         for c in range(BOARD_SIZE):
-    #             if board[r][c] is not None:
-    #                 if board[r][c][0]==self._color:
-    #                     player_power += board[r][c][1]
-    #                 else:
-    #                     enemy_power += board[r][c][1]
-    #     # consider how many moves you can make compared to enemy
-    #     mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
-    #     return 0.98*(player_power - enemy_power)+0.02*mobility_diff
+            best_move = best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
+            return best_move
     
-    def eval_fn(self, state):
+    def adv_eval_fn(self, state):
         # consider player power compared to enemy power after a move
         player_power, enemy_power = 0, 0
         board = state._board
@@ -160,15 +148,44 @@ class Agent:
         # consider how many moves you can make compared to enemy
         mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
         spawn_mobility_diff = len(self.generate_spawns(self._color, state)) - len(self.generate_spawns(self._enemy, state))
-        print(0.94*(player_power - enemy_power), 0.01*(mobility_diff), 0.05*(spawn_mobility_diff))
-        return 0.94*(player_power - enemy_power) + 0.01*(mobility_diff) + 0.05*(spawn_mobility_diff)
+        return 0.95*(player_power - enemy_power) + 0.02*(mobility_diff) + 0.3*(spawn_mobility_diff)
+    
+    def power_eval_fn(self, state):
+        # consider player power compared to enemy power after a move
+        player_power, enemy_power = 0, 0
+        board = state._board
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0] == self._color:
+                        player_power += board[r][c][1]
+                    else:
+                        enemy_power += board[r][c][1]
+        # consider how many moves you can make compared to enemy
+        return player_power - enemy_power
+    
+    def hybrid_eval_fn(self, state):
+        # consider player power compared to enemy power after a move
+        player_power, enemy_power = 0, 0
+        player_cells, enemy_cells = 0, 0
+        board = state._board
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0] == self._color:
+                        player_power += board[r][c][1]
+                        player_cells += 1
+                    else:
+                        enemy_power += board[r][c][1]
+                        enemy_cells += 1
+        # consider how many moves you can make compared to enemy
+        return 1.5*player_power - enemy_power + 2*(player_cells - enemy_cells)
 
     def generate_spawns(self, player, state):
         board = state._board
         # check for spawn moves within capture zone of enemy cell
         valid_spawns = []
         enemy_cells = []
-        # enemy_cells = [cell for row in board for cell in row if cell is not None and cell[0] == self._enemy]
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 if board[r][c] is not None:

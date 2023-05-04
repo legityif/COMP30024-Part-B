@@ -24,9 +24,9 @@ class Agent:
         self._board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         match color:
             case PlayerColor.RED:
-                print("Testing: RandomAgent is playing as red")
+                print("Testing: Greedy is playing as red")
             case PlayerColor.BLUE:
-                print("Testing: RandomAgent is playing as blue")
+                print("Testing: Greedy is playing as blue")
 
     def action(self, **referee: dict) -> Action:
         """
@@ -34,26 +34,30 @@ class Agent:
         """
         match self._color:
             case PlayerColor.RED:
-                best_move = None
-                max_heuristic = -1e8
-                possible_moves = self.generate_moves()
-                for move in possible_moves:
-                    actionedBoard = self.applyMovetoBoard(self._board, move, self._color)
-                    if self.heuristic(actionedBoard)>=max_heuristic:
-                        best_move = move
-                        max_heuristic = self.heuristic(actionedBoard)
-                return best_move
-
-            case PlayerColor.BLUE:
-                best_move = None
+                best_moves = []
                 max_heuristic = -1e8
                 possible_moves = self.generate_moves()
                 for move in possible_moves:
                     actionedBoard = self.applyMovetoBoard(self._board, move, self._color)
                     if self.heuristic(actionedBoard)>max_heuristic:
-                        best_move = move
+                        best_moves = [move]
                         max_heuristic = self.heuristic(actionedBoard)
-                return best_move
+                    elif self.heuristic(actionedBoard)==max_heuristic:
+                        best_moves.append(move)
+                return best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
+
+            case PlayerColor.BLUE:
+                best_moves = []
+                max_heuristic = -1e8
+                possible_moves = self.generate_moves()
+                for move in possible_moves:
+                    actionedBoard = self.applyMovetoBoard(self._board, move, self._color)
+                    if self.heuristic(actionedBoard)>max_heuristic:
+                        best_moves = [move]
+                        max_heuristic = self.heuristic(actionedBoard)
+                    elif self.heuristic(actionedBoard)==max_heuristic:
+                        best_moves.append(move)
+                return best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
 
     def turn(self, color: PlayerColor, action: Action, **referee: dict):
         """
@@ -115,10 +119,6 @@ class Agent:
             power-=1
         board[orig_cell.r][orig_cell.q] = None
         cell = orig_cell
-    
-    def randomMove(self, possible_moves):
-        rand_move = random.randint(0, len(possible_moves)-1)
-        return possible_moves[rand_move]
 
     def validTotalBoardPower(self):
         power = 0
