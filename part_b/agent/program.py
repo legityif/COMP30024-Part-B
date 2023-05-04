@@ -95,7 +95,7 @@ class Agent:
     def minimax(self, state, depth, max_depth, player, alpha, beta):
         if state.reachedTerminal() or depth==max_depth:
             # print("curr depth: " + str(depth) + " terminal=" + str(state.reachedTerminal()) + " player: " + str(player) + " eval: " + str(self.adv_eval_fn(state)))
-            return self.power_eval_fn(state)
+            return self.hybrid_eval_fn(state)
         is_maximising = (player == self._color)
         # print("curr depth: " + str(depth) + " terminal=" + str(state.reachedTerminal()) + " player: " + str(player) + " eval: " + str(self.adv_eval_fn(state)))
         best_score = -1e8 if is_maximising else 1e8
@@ -111,7 +111,7 @@ class Agent:
             else:
                 best_score = min(best_score, score)
                 beta = min(beta, best_score)
-                if beta>=alpha:
+                if beta<=alpha:
                     break
         return best_score
 
@@ -228,7 +228,7 @@ class Agent:
         moves_with_eval = []
         for move in possible_moves:
             new_state = self.applyMovetoBoard(state, move, player)
-            moves_with_eval.append([move, self.eval_fn(new_state)])
+            moves_with_eval.append([move, self.hybrid_eval_fn(new_state)])
         sorted_moves = sorted(moves_with_eval, key=lambda x: x[1], reverse=True)
         return [move[0] for move in sorted_moves]
         
