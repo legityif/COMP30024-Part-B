@@ -18,6 +18,9 @@ MAX_COORD = 6
 MIN_COORD = 0
 INF = float('inf')
 NEGATIVE_INF = float('-inf')
+MAX_DEPTH = 3
+MAX_TURNS = 343
+WIN_POWER_DIFF = 2
 
 # This is the entry point for your game playing agent. Currently the agent
 # simply spawns a token at the centre of the board if playing as RED, and
@@ -30,40 +33,22 @@ class Agent:
         """
         Initialise the agent.
         """
-        self._board = {}
         self._color = color
-        self._colour = "r" if color == PlayerColor.RED else "b"
+        self._state = board_state(board={}, move=None, turn=0, color=self._color)
         match color:
             case PlayerColor.RED:
                 print("Testing: I am playing as red")
             case PlayerColor.BLUE:
                 print("Testing: I am playing as blue")
+
     def action(self, **referee: dict) -> Action:
         """
         Return the next action to take.
         This agent will use the minimax algorithm with alpha-beta pruning to choose 
             the move that maximizes the number of cells controlled by its own color.
         """
-        # assuming there is always a move to be made
-        max_value = -INF
-        best_moves = []
-        visited = {}
-        start_time = time.time()
-        if countColour(self._board, self._colour) > countColour(self._board, opponent(self._colour))+4:
-            return greedy(self._board, self._colour)
-        options = generate_options(self._colour, self._colour, self._board, 0)
-        for state in options:
-            if time.time() - start_time > 5:
-                return random.choice(best_moves)
-            if countColour(state.board, opponent(self._color)) == 0:
-                return state.move
-            value = minimax(visited, state.board, depth=0, maximising=False, color=self._colour, alpha=-INF, beta=INF)
-            if value >= max_value:
-                max_value = value
-                best_moves.append(state.move)
-        if max_value == -INF:
-            return options[0].move
-        return random.choice(best_moves)
+        self._state.turn += 1
+        return self.best_minimax_move()
 
     def turn(self, color: PlayerColor, action: Action, **referee: dict):
         """
@@ -73,36 +58,218 @@ class Agent:
             case SpawnAction(cell):
                 print(f"Testing: {color} SPAWN at {cell}")
                 if PlayerColor.RED == color:
-                    self._board[(cell.r, cell.q)] = ("r", 1)
+                    self._state.board[(cell.r, cell.q)] = ("r", 1)
                 else:
-                    self._board[(cell.r, cell.q)] = ("b", 1)
+                    self._state.board[(cell.r, cell.q)] = ("b", 1)
                 pass
             case SpreadAction(cell, direction):
                 print(f"Testing: {color} SPREAD from {cell}, {direction}")
-                update_board(self._board, cell.r, cell.q, direction)
+                update_board(self._state.board, cell.r, cell.q, direction)
                 pass
 
+    def best_minimax_move(self):
+        # assuming there is always a move to be made
+        max_value = NEGATIVE_INF
+        best_moves = []
+        start_time = time.time()
+        if count_color(self._state.board, self._color) - count_color(self._state.board, self._color.opponent) > 8:
+            return self.greedy()
+        for option in generate_options(self._state):
+            # if time.time() - start_time > 5:
+            #     return random.choice(best_moves)
+            value = self.minimax(state=option, depth=1, color=self._color.opponent, alpha=NEGATIVE_INF, beta=INF)
+            # print("OPTION", option.board, str(option.move), value)
+            if value > max_value:  
+                max_value = value
+                best_moves = [option.move]
+            elif value == max_value: 
+                best_moves.append(option.move)
+        if max_value == NEGATIVE_INF:
+            return self.random()
+        # print([str(move) for move in best_moves])
+
+        # select move with lowest depth from all best moves
+        # lowest_depth = NEGATIVE_INF
+        # for move in best_moves:
+        #     if 
+        return random.choice(best_moves)
+
+    def minimax(self, state, depth, color, alpha, beta):
+        """
+        Return the best move and estimated value of board state using minimax
+        """
+        if state.game_over() and depth == 1:
+            if state.winner_color() == self._color:
+                return INF
+            else:
+                return NEGATIVE_INF
+        if depth == MAX_DEPTH:
+            return state.weighted_eval()
+        maximising = (color == self._color)
+        if maximising:
+            max_val = NEGATIVE_INF
+            for option in generate_options(state):
+                val = self.minimax(option, depth + 1, color.opponent, alpha, beta)
+                max_val = max(max_val, val)
+                alpha = max(alpha, max_val)
+                if alpha >= beta:
+                    break
+            return max_val
+        else:
+            min_value = INF
+            for option in generate_options(state):
+                value = self.minimax(option, depth + 1, color.opponent, alpha, beta)
+                min_value = min(min_value, value)
+                beta = min(beta, min_value)
+                if alpha >= beta:
+                    break
+            return min_value
+
+    def greedy(self):
+        best_moves = []
+        max_value = NEGATIVE_INF
+        for option in generate_options(self._state):
+            val = option.power_eval
+            if val > max_val:
+                best_moves = [option.move]
+                max_val = val
+            elif val == max_val:
+                best_moves.append(option.move)
+        return random.choice(best_moves)  
+
+    def random(self):
+        return random.choice([option.move for option in generate_options(self._state)])
+
 class board_state:
-    def __init__(self, board, move, value, colour):
+    def __init__(self, board, move, turn, color):
         self.board = board
         self.move = move
-        self.value = value
-        self.colour = colour
+        self.color = color
+        self.turn = turn
     
-    def __lt__(self, other):
-        if self.value == other.value:
-            self_count, other_count = 0,0
-            self_count = countColour(self.board, self.colour)
-            other_count = countColour(other.board, other.colour)
-            return self_count < other_count
-        return self.value > other.value
-    
+    def valid_state(self):
+        """
+        Return whether the board is a valid state
+        """
+        return count_power(self.board, PlayerColor.BLUE) + count_power(self.board, PlayerColor.RED) <= MAX_TOTAL_POWER
 
-def generate_options(player, color, board, greedy):
+    def game_over(self):
+        if self.turn < 2: 
+            return False
+        
+        return any([
+            self.turn >= MAX_TURNS,
+            count_power(self.board, PlayerColor.RED) == 0,
+            count_power(self.board, PlayerColor.BLUE) == 0
+        ])
+
+    def winner_color(self):
+        """
+        The player (color) who won the game, or None if no player has won.
+        """
+        if not self.game_over():
+            return None
+        
+        red_power = count_power(self.board, PlayerColor.RED)
+        blue_power = count_power(self.board, PlayerColor.BLUE)
+
+        if abs(red_power - blue_power) < WIN_POWER_DIFF:
+            return None
+        
+        return (PlayerColor.RED, PlayerColor.BLUE)[red_power < blue_power]
+        
+    def weighted_eval(self):
+        board = self.board
+        color = self.color
+        # HAS FLAW - if red has power 5 cell, and blue has 5 power 1 cells:
+        # eval says blue is favoured, however red is winning if 5 blue cells are lined up for red spread
+        # add variable to determine how many cells the highest power cell of color can reach
+        our_power = count_power(board, color)
+        opponent_power = count_power(board, color.opponent)
+        num_our_cells = count_color(board, color)
+        num_opponent_cells = count_color(board, color.opponent)
+        # IDK
+        our_reachable = count_reachable_cells(board, color)
+        opponent_reachable = count_reachable_cells(board, color.opponent)
+        '''
+        Final equation for heuristic value is still to be tested and determined
+        '''
+        power_w = 1.5
+        cell_w = 2.0
+        reachable_w = 0.5
+        
+        value = power_w*(our_power - opponent_power) + cell_w*(num_our_cells - num_opponent_cells) + reachable_w*(our_reachable - opponent_reachable)
+
+        # return a normalised value of our heuristic estimate between -1 and 1
+        return value / ((MAX_TOTAL_POWER - 1)*2)
+
+    def minimax_eval(self):
+        board = self.board
+        color = self.color
+        our_power = count_power(board, color)
+        opponent_power = count_power(board, color.opponent)
+        num_our_cells = count_color(board, color)
+        num_opponent_cells = count_color(board, color.opponent)
+        if num_our_cells == 0:
+            return float("-inf")
+        if num_opponent_cells == 0:
+            return float("inf")
+        return 1.5*(our_power/num_our_cells) - (opponent_power/num_opponent_cells) + num_our_cells - 1.75*num_opponent_cells
+
+    def greedy_eval(self):
+        board = self.board
+        color = self.color
+        our_power = count_power(board, color)
+        opponent_power = count_power(board, opponent(color))
+        num_our_cells = countColour(board, color)
+        num_opponent_cells = countColour(board, opponent(color))
+        return our_power + 0.5*num_our_cells - 2*num_opponent_cells
+    
+    def power_eval(self):
+        return count_power(self.board, self.color) - count_power(self.board, self.color.opponent)
+
+def count_power(board, color):
+    '''
+    Return count of colour power
+    '''
+    color = 'r' if color == PlayerColor.RED else 'b'
+    return sum([k for player, k in board.values() if player == color])
+
+def count_color(board, color):
+    '''
+    Return count of colour tokens
+    '''
+    color = 'r' if color == PlayerColor.RED else 'b'
+    return sum([1 for player, k in board.values() if player == color])
+
+def count_reachable_cells(board, color):
+    '''
+    count number of cells that can be spread to
+    '''
+    color = 'r' if color == PlayerColor.RED else 'b'
+    count = 0
+    max_power_cell = (0, 0, 0)
+    for (r, q), (clr, power) in board.items():
+        if clr == color and power > max_power_cell[2]:
+            max_power_cell = (r, q, power)
+
+    r, q, power = max_power_cell
+    for direction in DIRS:
+        rd = direction.__getattribute__("r")
+        qd = direction.__getattribute__("q")
+        nr = (r + rd + (power*rd)) % MAX_POWER
+        nq = (q + qd + (power*qd)) % MAX_POWER
+        if (nr, nq) in board:
+            count += 1 
+    return count
+
+def generate_options(state):
     """
     Return list of possible moves and their new states for a player at a given board state 
     """
-    possible_moves = []
+    color = 'r' if state.color == PlayerColor.RED else 'b'
+    board = state.board
+    possible_states = []
     # Add all possible Spread moves
     for r, q in board:
         if board[(r,q)][0] == color:
@@ -112,19 +279,10 @@ def generate_options(player, color, board, greedy):
                 update_board(new_board, r, q, d)
                 pos = HexPos(r, q)
                 move = SpreadAction(pos, d)
-                # NOTE - SINGLE POWER CELL CHECKING
-                if board[(r,q)][1] == 1:
-                    nr, nq = (r + d.__getattribute__('r')) % MAX_POWER, (q + d.__getattribute__('q')) % MAX_POWER
-                    if not (nr, nq) in board:
-                        continue
-                if greedy:
-                    
-                    value = greedy_eval(new_board, player)
-                else:
-                    value = eval(new_board, player, 0)
-                option = board_state(new_board, move, value, color)
-                if valid_state(new_board):
-                    possible_moves.append(option)
+                turn = state.turn + 1
+                option = board_state(new_board, move, turn, state.color)
+                if option.valid_state():
+                    possible_states.append(option)
     # Add all possible Spawn moves
     for r in range(0, 7):
         for q in range(0, 7):
@@ -133,28 +291,11 @@ def generate_options(player, color, board, greedy):
                 new_board[(r,q)] = (color, 1)
                 pos = HexPos(r, q)
                 move = SpawnAction(pos)
-                # don't spawn in neighbouring cell of opponent
-                # NOTE - leads to fail when losing :( it can't find any moves to make
-                # found = False
-                # for d in DIRS:
-                #     nr, nq = (r + d.__getattribute__('r')) % MAX_POWER, (q + d.__getattribute__('q')) % MAX_POWER
-                #     if (nr, nq) in new_board and new_board[(nr,nq)][0] == opponent(color):
-                #         found = True
-                #         break
-                # if found:
-                #     continue
-                if greedy:
-                    value = greedy_eval(new_board, player)
-                else:
-                    value = eval(new_board, player, 0)
-                option = board_state(new_board, move, value, color)
-                if valid_state(new_board):
-                    possible_moves.append(option)
-    if player != color:
-        return sorted(possible_moves, reverse=True)
-    return sorted(possible_moves)
-
-
+                turn = state.turn + 1
+                option = board_state(new_board, move, turn, state.color)
+                if option.valid_state():
+                    possible_states.append(option)
+    return possible_states
 
 def update_board(input: dict[tuple, tuple], r, q, direction: HexDir):
     '''
@@ -177,99 +318,6 @@ def update_board(input: dict[tuple, tuple], r, q, direction: HexDir):
             input[(new_r, new_q)] = (input[(r,q)][0], 1)
 
     del input[(r, q)]
-
-def valid_state(board):
-    """
-    Return whether the board is a valid state
-    """
-    return count_power(board, "b") + count_power(board, "r") <= MAX_TOTAL_POWER
-
-def count_power(board, colour):
-    '''
-    Return count of colour power
-    '''
-    count = 0
-    for player, k in board.values():
-        if player == colour:
-            count += k
-    return count
-
-def countColour(board, colour):
-    '''
-    Return count of colour tokens
-    '''
-    count = 0
-    for player, k in board.values():
-        if player == colour:
-            count += 1
-    return count
-
-def minimax(visited, board, depth, maximising, color, alpha, beta):
-    """
-    Return the best move and estimated value of board state using minimax
-    """
-    if depth == 3:
-        return eval(board, color, depth)
-    if countColour(board, color) == 0:
-        return NEGATIVE_INF
-    if countColour(board, opponent(color)) == 0:
-        return INF
-    if maximising:
-        max_value = NEGATIVE_INF
-        for state in generate_options(color, color, board, 0):
-            str_board = str(state.board)
-            if not str_board in visited.keys():
-                value = minimax(visited, state.board, depth+1, False, color, alpha, beta)
-                visited[str_board] = value
-                symmetries = get_symmetric(state.board)
-                for board in symmetries:
-                    visited[str(board)] = value
-            else:
-                value = visited[str_board]
-            max_value = max(max_value, value)
-            alpha = max(alpha, max_value)
-            if alpha >= beta:
-                break
-        return max_value
-    else:
-        min_value = INF
-        for state in generate_options(color, opponent(color), board, 0):
-            str_board = str(state.board)
-            if not str_board in visited.keys():
-                value = minimax(visited, state.board, depth+1, True, color, alpha, beta)
-                visited[str_board] = value
-                symmetries = get_symmetric(state.board)
-                for board in symmetries:
-                    visited[str(board)] = value
-            else:
-                value = visited[str_board]
-            min_value = min(min_value, value)
-            beta = min(beta, min_value)
-            if alpha >= beta:
-                break
-        return min_value
-
-def opponent(color):
-    return 'b' if color == 'r' else 'r'
-
-def greedy_eval(board, color):
-    our_power = count_power(board, color)
-    opponent_power = count_power(board, opponent(color))
-    num_our_cells = countColour(board, color)
-    num_opponent_cells = countColour(board, opponent(color))
-    return our_power + 0.5*num_our_cells - 2*num_opponent_cells
-
-def eval(board, color, depth):
-    our_power = count_power(board, color)
-    opponent_power = count_power(board, opponent(color))
-    return our_power - opponent_power
-    num_our_cells = countColour(board, color)
-    num_opponent_cells = countColour(board, opponent(color))
-    if num_our_cells == 0:
-        return -INF
-    if num_opponent_cells == 0:
-        return INF
-    return 1.5*(our_power/num_our_cells) - (opponent_power/num_opponent_cells) + 1.75*(num_our_cells -  num_opponent_cells)
 
 def get_symmetric(board):
     symmetries = []
@@ -297,7 +345,6 @@ def get_symmetric(board):
     symmetries.append(rotation7)
     return symmetries
 
-def greedy(board, colour):
     possible_moves = generate_options(colour, colour, board, 1)
     possible_moves.sort()
     return possible_moves[0].move
