@@ -104,7 +104,7 @@ class Agent:
             else:
                 return NEGATIVE_INF
         if depth == MAX_DEPTH:
-            return state.weighted_eval()
+            return state.minimax_eval()
         maximising = (color == self._color)
         if maximising:
             max_val = NEGATIVE_INF

@@ -151,7 +151,7 @@ class Agent:
         moves = self.generate_moves(player, state)
         for move in moves:
             curr_time = time.time()
-            if curr_time-start_time>10:
+            if curr_time-start_time>8:
                 return self.greedymove(state, player, moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
