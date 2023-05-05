@@ -3,7 +3,8 @@
 
 BOARD_SIZE = 7
 MINIMAX_DEPTH = 3
-LATE_GAME = 50
+EARLY_GAME = 20
+MID_GAME = 20
 
 import random, math
 from referee.game import \
@@ -83,82 +84,119 @@ class Agent:
     def action(self, **referee: dict) -> Action:
         """
         Return the next action to take.
-        """
-        match self._color:
-            case PlayerColor.RED:
-                self._turn += 1
-                return self.best_move(self._state, self._color)
-            case PlayerColor.BLUE:       
-                self._turn += 1 
-                return self.best_move(self._state, self._color) 
-    
-    def minimax(self, state, depth, max_depth, player, alpha, beta, tt):
-        # Check if we've already evaluated this state
-        tt_entry = tt.get(state)
-        if tt_entry is not None and tt_entry['depth'] >= depth:
-            if tt_entry['flag'] == 'exact':
-                return tt_entry['score']
-            elif tt_entry['flag'] == 'lowerbound':
-                alpha = max(alpha, tt_entry['score'])
-            elif tt_entry['flag'] == 'upperbound':
-                beta = min(beta, tt_entry['score'])
-            if alpha >= beta:
-                return tt_entry['score']
-
+        """       
+        self._turn += 1 
+        return self.best_move(self._state, self._color)
+             
+    def minimax(self, state, depth, max_depth, player, alpha, beta):
         if state.reachedTerminal() or depth==max_depth:
-            score = self.hybrid_eval_fn(state)
-            # Store the evaluation in the transposition table
-            tt[state] = {'flag': 'exact', 'depth': depth, 'score': score}
-            return score
-
+            if (self._turn < EARLY_GAME): 
+                return self.early_game(state)
+            else:
+                return self.mid_game(state)
         is_maximising = (player == self._color)
         best_score = -1e8 if is_maximising else 1e8
-        moves = self.generate_ordered_moves(player, state)
+        moves = self.generate_moves(player, state)
         for move in moves:
             new_state = self.applyMovetoBoard(state, move, player)
-            score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta, tt)
+            score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta)
             if is_maximising:
                 best_score = max(best_score, score)
                 alpha = max(alpha, best_score)
-                if alpha >= beta:
+                if alpha>=beta:
                     break
             else:
                 best_score = min(best_score, score)
                 beta = min(beta, best_score)
-                if alpha >= beta:
+                if alpha>=beta:
                     break
-
-        # Store the best score in the transposition table
-        if best_score <= alpha:
-            flag = 'upperbound'
-        elif best_score >= beta:
-            flag = 'lowerbound'
-        else:
-            flag = 'exact'
-        tt[state] = {'flag': flag, 'depth': depth, 'score': best_score}
         return best_score
 
     def best_move(self, state, player):
         best_score = -1e8
         best_moves = []
-        tt = {}
         moves = self.generate_moves(player, state)
         for move in moves:
             new_state = self.applyMovetoBoard(state, move, player)
-            score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8, tt)
+            # if big difference in score, return fast greedy move
+            if self.num_cell_diff(new_state)>10 or self.total_power_diff(new_state)>10:
+                return self.greedymove(state, player, moves)
+            # otherwise do minimax
+            score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
             if score > best_score:  # update best_score
                 best_score = score
                 best_moves = [move]  # reset best_moves
             elif score == best_score:  # append to best_moves
                 best_moves.append(move)
         if len(best_moves) == 0:
-            print("error no best move")
-            return None
+            return self.randomMove(state, player)
         else:
             best_move = best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
             return best_move
     
-    def power_eval_fn(self, state):
+    def greedymove(self, state, player, moves):
+        best_moves = []
+        max_heuristic = -1e8
+        for move in moves:
+            new_state = self.applyMovetoBoard(state, move, player)
+            if self.total_power_diff(new_state)>max_heuristic:
+                best_moves = [move]
+                max_heuristic = self.total_power_diff(new_state)
+            elif self.total_power_diff(new_state)==max_heuristic:
+                best_moves.append(move)
+        return best_moves[0] if len(best_moves)==1 else random.choice(best_moves)  
+    
+    # STUFF TO DO WITH EVALUATION FUNCTIONS
+    
+    def early_game(self, state):
+        player_connectivity = self.count_connected_components(state, self._color)
+        enemy_connectivity = self.count_connected_components(state, self._enemy)
+        connectivity_diff = player_connectivity - enemy_connectivity
+        num_cell_diff = self.num_cell_diff(state)
+        return 0.7*num_cell_diff + 0.3*connectivity_diff
+
+    def mid_game(self, state):
+        player_connectivity = self.count_connected_components(state, self._color)
+        enemy_connectivity = self.count_connected_components(state, self._enemy)
+        connectivity_diff = player_connectivity - enemy_connectivity
+        mobility_diff = self.generate_moves(self._color, state) - self.generate_moves(self._enemy, state)
+        total_power_diff = self.total_power_diff(state)
+        return 0.7*total_power_diff + 0.25*connectivity_diff + 0.05*mobility_diff
+    
+    def count_connected_components(self, state, player):
+        board = state._board
+        visited = set()
+        count = 0
+        for r in range(len(board)):
+            for c in range(len(board[0])):
+                if (r, c) not in visited and board[r][c] is not None and board[r][c][0]==player:
+                    count += 1
+                    queue = [(r, c)]
+                    visited.add((r, c))
+                    while queue:
+                        row, col = queue.pop(0)
+                        for dr, dc in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
+                            new_r, new_c = row + dr, col + dc
+                            if 0 <= new_r < len(board) and 0 <= new_c < len(board[0]) and (new_r, new_c) not in visited and board[new_r][new_c] is not None and board[new_r][new_c][0] == board[r][c][0]:
+                                queue.append((new_r, new_c))
+                                visited.add((new_r, new_c))
+        return count
+    
+    def num_cell_diff(self, state):
+        # consider player power compared to enemy power after a move
+        player_cells, enemy_cells = 0, 0
+        board = state._board
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0] == self._color:
+                        player_cells += 1
+                    else:
+                        enemy_cells += 1
+        # consider how many moves you can make compared to enemy
+        return player_cells - enemy_cells
+    
+    def total_power_diff(self, state):
         # consider player power compared to enemy power after a move
         player_power, enemy_power = 0, 0
         board = state._board
@@ -187,7 +225,7 @@ class Agent:
                         enemy_power += board[r][c][1]
                         enemy_cells += 1
         # consider how many moves you can make compared to enemy
-        return player_power - enemy_power + 2*(player_cells - enemy_cells)
+        return 0.7*(player_power - enemy_power) + 0.3*(player_cells - enemy_cells)
     
     def adv_eval_fn(self, state):
         # consider player power compared to enemy power after a move
@@ -300,27 +338,54 @@ class Agent:
                         continue 
         return possible_moves
     
-    # def minimax(self, state, depth, max_depth, player, alpha, beta):
+    def randomMove(self, possible_moves):
+        rand_move = random.randint(0, len(possible_moves)-1)
+        return possible_moves[rand_move]
+    
+    # def minimax(self, state, depth, max_depth, player, alpha, beta, tt):
+    #     # Check if we've already evaluated this state
+    #     tt_entry = tt.get(state)
+    #     if tt_entry is not None and tt_entry['depth'] >= depth:
+    #         if tt_entry['flag'] == 'exact':
+    #             return tt_entry['score']
+    #         elif tt_entry['flag'] == 'lowerbound':
+    #             alpha = max(alpha, tt_entry['score'])
+    #         elif tt_entry['flag'] == 'upperbound':
+    #             beta = min(beta, tt_entry['score'])
+    #         if alpha >= beta:
+    #             return tt_entry['score']
+
     #     if state.reachedTerminal() or depth==max_depth:
-    #         # print("curr depth: " + str(depth) + " terminal=" + str(state.reachedTerminal()) + " player: " + str(player) + " eval: " + str(self.adv_eval_fn(state)))
-    #         return self.adv_eval_fn(state)
+    #         score = self.hybrid_eval_fn(state)
+    #         # Store the evaluation in the transposition table
+    #         tt[state] = {'flag': 'exact', 'depth': depth, 'score': score}
+    #         return score
+
     #     is_maximising = (player == self._color)
-    #     # print("curr depth: " + str(depth) + " terminal=" + str(state.reachedTerminal()) + " player: " + str(player) + " eval: " + str(self.adv_eval_fn(state)))
     #     best_score = -1e8 if is_maximising else 1e8
     #     moves = self.generate_ordered_moves(player, state)
     #     for move in moves:
     #         new_state = self.applyMovetoBoard(state, move, player)
-    #         score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta)
+    #         score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta, tt)
     #         if is_maximising:
     #             best_score = max(best_score, score)
     #             alpha = max(alpha, best_score)
-    #             if alpha>=beta:
+    #             if alpha >= beta:
     #                 break
     #         else:
     #             best_score = min(best_score, score)
     #             beta = min(beta, best_score)
-    #             if beta<=alpha:
+    #             if alpha >= beta:
     #                 break
+
+    #     # Store the best score in the transposition table
+    #     if best_score <= alpha:
+    #         flag = 'upperbound'
+    #     elif best_score >= beta:
+    #         flag = 'lowerbound'
+    #     else:
+    #         flag = 'exact'
+    #     tt[state] = {'flag': flag, 'depth': depth, 'score': best_score}
     #     return best_score
     
     # def generate_ordered_moves(self, player, state):
