@@ -106,14 +106,14 @@ class Agent:
                 return tt_entry['score']
 
         if state.reachedTerminal() or depth==max_depth:
-            score = self.hybrid_eval_fn(state)
+            score = self.power_eval_fn(state)
             # Store the evaluation in the transposition table
             tt[state] = {'flag': 'exact', 'depth': depth, 'score': score}
             return score
 
         is_maximising = (player == self._color)
         best_score = -1e8 if is_maximising else 1e8
-        moves = self.generate_ordered_moves(player, state)
+        moves = self.generate_moves(player, state)
         for move in moves:
             new_state = self.applyMovetoBoard(state, move, player)
             score = self.minimax(new_state, depth+1, max_depth, self._enemy if player == self._color else self._color, alpha, beta, tt)
