@@ -154,47 +154,6 @@ class Agent:
                         their_power += board[r][c][1]
         return your_power - their_power
                 
-    def heuristic_infinite_spread(self, board):
-        """
-        Since a red cell has to be one the same "line" as a blue cell (where a line is the straight line connecting the red and blue cell)
-        in order to take over the blue cell, we can find the minimum number of lines that it takes to connect all the blue cells. 
-        Where two blue cells are considered to be on the same "line" if they are connected in a straight line, in either the x, y, or z direction.
-        """
-
-        # first put all the blue cells into a queue
-        queue = deque()
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c]:
-                    if board[r][c][0]==self._color:
-                        queue.append((r, c))
-        
-        # Keep track of the marked row, column, and diagonals
-        visited = {"r0": False, "r1": False, "r2": False, "r3": False, "r4": False, "r5": False, "r6": False,
-                "c0": False, "c1": False, "c2": False, "c3": False, "c4": False, "c5": False, "c6": False,
-                "d0": False, "d1": False, "d2": False, "d3": False, "d4": False, "d5": False, "d6": False}
-        totalExpanded = 0
-        
-        while(queue):
-            r, c = queue.popleft()
-            # check if this cell has already been marked on the corresponding row, col, or diagonal
-            # sum of 7 --> diagonal 0, sum of 10 --> diagonal 3, sum of 11 --> diagonal 4, sum of 12 --> diagonal 5
-            # if r+c = n, where n < 7, then n is the diagonal number, otherwise, modulo it with 7   
-            row = "r" + str(r)
-            col = "c" + str(c)
-            diag = "d" + str((r+c)%BOARD_SIZE)
-
-            if visited[row]==True or visited[col]==True or visited[diag]==True:
-                continue
-            else:
-                # this cell is not on a marked line, we need to spread it in all 3 directions (mark all lines as visited)
-                visited[row] = True
-                visited[col] = True
-                visited[diag] = True
-                totalExpanded += 1
-        return totalExpanded
-                
-                
 class boardState:
     def __init__(self, board):
         self.board = board
