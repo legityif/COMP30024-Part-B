@@ -3,7 +3,7 @@
 
 BOARD_SIZE = 7
 MINIMAX_DEPTH = 3
-NUM_PLAYTHROUGHS = 100
+NUM_PLAYTHROUGHS = 1000
 LATE_GAME = 50
 
 import random, math
@@ -22,6 +22,7 @@ class Node:
         self.visits = 0
         self.UCB = 0
         self.max_subtree_UCB = 0
+        self.possible_moves = []
 
 
 class boardState:
@@ -119,28 +120,55 @@ class Agent:
         #print("in simulate, color is ", player)
         curr_node = node
         curr_player = player
-        curr_turn = node.state._turn
         #print("turn is: ", curr_turn)
-        while curr_node.state.reachedTerminal() == False:
+        while curr_node.state.reachedTerminal() == False and curr_node.state._turn < node.state._turn + 25:
             #print("\nnot in terminal state, player is:", curr_player)
             possible_moves = self.generate_moves(curr_player, curr_node.state)
-            move = self.randomMove(possible_moves)
-            #print("move is: ", move)
-            new_state = self.applyMovetoBoard(curr_node.state, move, curr_player)
-            curr_node = Node(move, new_state)
+
+            # greedy not very good?
+            # best_eval = -10000 if curr_player == self._color else 10000
+            # best_moves = []
+            # for move in possible_moves:
+            #     dummy_state = self.applyMovetoBoard(curr_node.state, move, curr_player)
+            #     power = self.power_eval_fn(dummy_state)
+            #     if curr_player == self._color:
+            #         if power > best_eval:
+            #             best_moves = [move]
+            #             best_eval = power
+            #         elif power == best_eval:
+            #             best_moves.append(move)
+            #     elif curr_player != self._color:
+            #         if power < best_eval:
+            #             best_moves = [move]
+            #             best_eval = power
+            #         elif power == best_eval:
+            #             best_moves.append(move)
+
+            # best_move = self.randomMove(best_moves)
+            #print("turn: ", curr_node.state._turn, "player: ", curr_player, "best_eval: ", best_eval)
+
+            best_move = self.randomMove(possible_moves)
+            if best_move is None:
+                print("error no best move")
+                return None
+
+            #print("move is: ", best_move)
+            new_state = self.applyMovetoBoard(curr_node.state, best_move, curr_player)
+            #print("new board: ", new_state._board)
+            curr_node = Node(best_move, new_state)
             curr_player = PlayerColor.RED if PlayerColor.BLUE == curr_player else PlayerColor.BLUE
         
         # calculate result, every win/loss is calculated in terms of self.player (our actual agent color)
-        # print("---after simulation, turn is ", curr_node.state._turn)
+        #print("---after simulation, turn is ", curr_node.state._turn)
         # if curr_node.state._turn == 343:
         #     print("draw")
         #     return 0
-        if self.power_eval_fn(curr_node.state) > 5:
+        if self.power_eval_fn(curr_node.state) > 10:
             #print("positive power")
             return 1
-        elif self.power_eval_fn(curr_node.state) > 0:
+        elif self.power_eval_fn(curr_node.state) > 5:
             #print("somewhat positive power")
-            return 0.5
+            return 0.25
         else:
             #print("negative")
             return 0
@@ -149,15 +177,15 @@ class Agent:
     def selection(self, root, player):
         # select using UCB, assume that when this function is called, all children of root node are expanded
         # all nodes in the tree have a max_UCB value of their subtree, and every node has their own UCB value 
+        #TODO: need to deal with the case where the selected node is fully expanded
         
-        print("-------------------tree max: ", root.max_subtree_UCB)
+        #print("-------------------in selection, tree max: ", root.max_subtree_UCB)
         node = root
         while len(node.children) > 0:
             max_UCB_child = None
             for child in node.children:
                 #print("for this child, color is: ", child.state._color, ",UCB is", child.UCB)
                 if abs(child.max_subtree_UCB - root.max_subtree_UCB) <= 0.0001:
-                    print("max subtree ucb child found", child.max_subtree_UCB)
                     max_UCB_child = child
                     break
 
@@ -165,26 +193,28 @@ class Agent:
                 print("error in selection")
                 return None
             
-            print("here")
+            #print("here")
             node = max_UCB_child
-            print("node UCB", node.UCB)
+            #print("node UCB", node.UCB)
             if abs(node.UCB - root.max_subtree_UCB) <= 0.0001:
+                #print("return node in selection, selected node is on turn ", node.state._turn)
                 return node
             
-            result = []
-            queue = deque([root])
-            while queue:
-                node = queue.popleft()
-                result.append(node)
+            # result = []
+            # queue = deque([root])
+            # while queue:
+            #     q_node = queue.popleft()
+            #     result.append(q_node)
                 
-                for child in node.children:
-                    queue.append(child)
+            #     for child in q_node.children:
+            #         queue.append(child)
 
-            for child in result:
-                print("child has UCB: ", child.UCB)
+            # for child in result:
+            #     print("child is on turn: ", child.state._turn, "child has UCB: ", child.UCB)
 
 
         print("best UCB not found, error")
+        quit()
 
         return None
     
@@ -202,57 +232,125 @@ class Agent:
         # Add one child node to the given node, using an expansion strategy
         # player is the player that just made the move
         next_player = PlayerColor.RED if PlayerColor.BLUE==player else PlayerColor.BLUE
-        possible_moves = self.generate_moves(next_player, node.state)
-        move = self.randomMove(possible_moves)
+
+        if len(node.possible_moves) == 0 and len(node.children) == 0:
+            node.possible_moves = self.generate_moves(next_player, node.state)
+
+        if len(node.possible_moves) == 0 and len(node.children) != 0:
+            print("error in expand, no more possible moves")
+            quit()
+
+        move = self.randomMove(node.possible_moves)
+        node.possible_moves.remove(move)
         new_state = self.applyMovetoBoard(node.state, move, next_player)
         new_node = Node(move, new_state, node)
         node.children.append(new_node)
 
         return new_node
     
-    def backpropagate(self, node, value):
+    def backpropagate(self, node, value, root):
         # Propagate upwards, updating the wins / visits, also update the max_UCB and its own UCB, 
         # as well as the direct children's UCB of each node on the way up
+
+        # print("\n in propagate, node is on turn: ", node.state._turn, ", player color is: ", node.state._color, "move is: ", node.move, "value is: ", value)
+        # print("before anything is done: here are the values")
+        # result = []
+        # queue = deque([root])
+        # while queue:
+        #     node = queue.popleft()
+        #     result.append(node)
+            
+        #     for child in node.children:
+        #         queue.append(child)
+
+        # for child in result:
+        #     if child == root:
+        #         #print("root node")
+        #         continue
+        #     else:
+        #         #print("child is on turn: ", child.state._turn, "child has UCB: ", child.UCB, "child has move: ", child.move, "wins: ", child.wins, "visits: ", child.visits, "parent wins: ", child.parent.wins, "parent visits: ", child.parent.visits)
+        #         continue
+
 
         # first update all the wins and visits by propagating upwards
         curr_node = node
         while curr_node is not None:
+            #print("curr_node: turn", curr_node.state._turn, "player color: ", curr_node.state._color, "move: ", curr_node.move, "self color: ", self._color)
             curr_node.visits += 1
-            curr_node.wins += value if node.state._color == self._color else 1-value
-            value = 1-value
+            #print("value is: ", value, "curr node wins: ", curr_node.wins)
+            curr_node.wins += value if curr_node.state._color == self._color else 1-value
+            #print("value is: ", value, "curr node wins: ", curr_node.wins)
             curr_node = curr_node.parent
+        
+        # print("\nafter the first backpropagation")
+        # for child in result:
+        #     if child == root:
+        #         print("root node")
+        #     else:
+        #         print("child is on turn: ", child.state._turn, "child has UCB: ", child.UCB, "child has move: ", child.move, "wins: ", child.wins, "visits: ", child.visits, "parent wins: ", child.parent.wins, "parent visits: ", child.parent.visits)
 
         # Then do backpropagation again, this time updating the UCB values
         # TODO: might be doing double updates on some nodes, could speed up? 
         curr_node = node
-        curr_max = 0
         while curr_node is not None:
             # update UCB of any direct children first
+            max_children_UCB = 0
             for child in curr_node.children:
-                child.UCB = self.calculate_UCB(child)
+                new_UCB = self.calculate_UCB(child)
+                if (new_UCB < child.UCB):
+                    print("error in backpropagation, should not get lower UCB")
+                child.UCB = new_UCB
                 child.max_subtree_UCB = max(child.max_subtree_UCB, child.UCB)
-                curr_node.max_subtree_UCB = max(curr_node.max_subtree_UCB, child.max_subtree_UCB)
-            # then update the curr_node's own UCB
-            curr_node.UCB = self.calculate_UCB(curr_node)
-            curr_node.max_subtree_UCB = max(curr_node.max_subtree_UCB, curr_node.UCB)
+                max_children_UCB = max(max_children_UCB, child.max_subtree_UCB)
 
-            # for testing 
-            curr_max = max(curr_max, curr_node.max_subtree_UCB)
+            # then update the curr_node's own UCB
+            curr_node_new_UCB = self.calculate_UCB(curr_node)
+            # if (curr_node_new_UCB < curr_node.UCB):
+            #     # if this curr_node was the highest UCB of the parent subtree, then we may need to update the maxes upwards
+            #     print("error in backpropagation, curr_node's new UCB should not be lower!")
+            #     print("error node is on turn: ", curr_node.state._turn, "with move: ", curr_node.move)
+            curr_node.UCB = curr_node_new_UCB
+            curr_node.max_subtree_UCB = max(max_children_UCB, curr_node.UCB)
 
             curr_node = curr_node.parent
 
-        print("\n in propagate, max UCB in the tree is: ", curr_max)
+        # print("after propagation, max UCB in the tree is: ", root.max_subtree_UCB)
+        # result = []
+        # queue = deque([root])
+        # while queue:
+        #     node = queue.popleft()
+        #     result.append(node)
+            
+        #     for child in node.children:
+        #         queue.append(child)
+
+        # for child in result:
+        #     # if child == root:
+        #     #     print("root node")
+        #     # else:
+        #     #     print("child is on turn: ", child.state._turn, "child has UCB: ", child.UCB, "child has move: ", child.move, "wins: ", child.wins, "visits: ", child.visits, "parent wins: ", child.parent.wins, "parent visits: ", child.parent.visits)
+        #     if child.UCB == root.max_subtree_UCB:
+        #         print("max child found, move is: ", child.move)
+        #         dummy_child = child
+        #         while dummy_child:
+        #             print("dummy_child, turn and move: ", dummy_child.state._turn, dummy_child.move)
+        #             dummy_child = dummy_child.parent
+        # print("propagate done -------------------------------------------\n")
+        
         return
 
     
     def MCTS(self, state, player):
-        # Do play through once for all the children of root node
+        # Do play through once for all the children of root node, player in the argument is the player that will move next
+        # each node's state._color is the player that JUST made the move 
+        random.seed(1)
         print("|||| MCTS: -----------------------------------\n")
         root = Node(None, state)
+        root.state._color = PlayerColor.RED if player==PlayerColor.BLUE else PlayerColor.BLUE
 
         moves = self.generate_moves(player, state)
         for move in moves:
-
+            
             #print("in MCTS, move is: ", move, "player is: ", player)
             child_state = self.applyMovetoBoard(state, move, player)
             #print("turn is: ", child_state._turn)
@@ -280,7 +378,7 @@ class Agent:
 
         # do a number of playthroughs using MCTS algorithm
         for i in range(NUM_PLAYTHROUGHS):
-            print("iteration number: ", i)
+            #print("iteration number: ", i)
             
             # TODO:  need to think about what happens with player color!
             node = self.selection(root, player)
@@ -293,7 +391,23 @@ class Agent:
             next_player = PlayerColor.RED if new_node.state._color == PlayerColor.BLUE else PlayerColor.BLUE
             result = self.simulate(new_node, next_player)
 
-            self.backpropagate(new_node, result)
+            self.backpropagate(new_node, result, root)
+            
+            # if i == NUM_PLAYTHROUGHS-1:
+            #     result = []
+            #     queue = deque([root])
+            #     while queue:
+            #         q_node = queue.popleft()
+            #         result.append(q_node)
+                    
+            #         for q_child in q_node.children:
+            #             queue.append(q_child)
+
+            #     for q_child in result:
+            #         if q_child == root:
+            #             print("root node")
+            #         else:
+            #             print("child is on turn: ", q_child.state._turn, "child has UCB: ", q_child.UCB, "child has move: ", q_child.move, "wins: ", q_child.wins, "visits: ", q_child.visits, "parent wins: ", q_child.parent.wins, "parent visits: ", q_child.parent.visits)
 
         # find the best move
         best_child = max(root.children, key=lambda x: x.wins / x.visits if x.visits != 0 else 0)
@@ -303,6 +417,7 @@ class Agent:
             print("error no best move")
             return None
         else:
+            print("power difference is: ", self.power_eval_fn(root.state))
             return best_child.move
     
     def power_eval_fn(self, state):
