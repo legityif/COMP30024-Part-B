@@ -2,9 +2,7 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-MINIMAX_DEPTH = 3
-NUM_PLAYTHROUGHS = 1000
-LATE_GAME = 50
+NUM_PLAYTHROUGHS = 100
 
 import random, math
 from referee.game import \
@@ -57,9 +55,11 @@ class boardState:
                     else:
                         enemy += self._board[r][c][1]
         #print("player: ", player, "enemy: ", enemy)
+        if enemy==0 and self._turn!=1:
+            return [True, 1]
         if (player==0 and self._turn != 1) or (enemy==0 and self._turn!=1) or (player==0 and enemy==0 and (self._turn!=0)) or self._turn==343:
-            return True
-        return False
+            return [True, 0]
+        return [False, 0]
         
 class Agent:
     def __init__(self, color: PlayerColor, **referee: dict):
@@ -121,7 +121,7 @@ class Agent:
         curr_node = node
         curr_player = player
         #print("turn is: ", curr_turn)
-        while curr_node.state.reachedTerminal() == False and curr_node.state._turn < node.state._turn + 25:
+        while curr_node.state.reachedTerminal()[0] == False and curr_node.state._turn < node.state._turn + 15:
             #print("\nnot in terminal state, player is:", curr_player)
             possible_moves = self.generate_moves(curr_player, curr_node.state)
 
@@ -163,9 +163,13 @@ class Agent:
         # if curr_node.state._turn == 343:
         #     print("draw")
         #     return 0
+        result = curr_node.state.reachedTerminal()
+        if result[1] == 1:
+            # print("won this one")
+            return 1
         if self.power_eval_fn(curr_node.state) > 10:
             #print("positive power")
-            return 1
+            return 0.9
         elif self.power_eval_fn(curr_node.state) > 5:
             #print("somewhat positive power")
             return 0.25
@@ -238,7 +242,10 @@ class Agent:
 
         if len(node.possible_moves) == 0 and len(node.children) != 0:
             print("error in expand, no more possible moves")
-            quit()
+            
+            # fallback
+            for child in node.children:
+                return self.expand(child, next_player)
 
         move = self.randomMove(node.possible_moves)
         node.possible_moves.remove(move)
