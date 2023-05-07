@@ -3,10 +3,10 @@
 
 BOARD_SIZE = 7
 MINIMAX_DEPTH = 3
-SUPER_EARLY_GAME = 5
-EARLY_GAME = 15
-MID_GAME = 30
-LATE_GAME = 45
+OPENING_GAME = 15
+EARLY_GAME = 30
+MID_GAME = 50
+LATE_GAME = 70
 
 import random, math
 import time
@@ -40,13 +40,12 @@ class UnionFind:
         return self.count
 
 class boardState:
-    def __init__(self, color, turn, board=None):
+    def __init__(self, turn, board=None):
         if board is None:
             self._board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         else:
             boardcopy = [row[:] for row in board]
             self._board = boardcopy
-        self._color = color
         self._turn = turn
     
     def validTotalBoardPower(self):
@@ -62,7 +61,7 @@ class boardState:
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 if self._board[r][c] is not None:
-                    if self._board[r][c][0]==self._color:
+                    if self._board[r][c][0]==PlayerColor.BLUE:
                         player += self._board[r][c][1]
                     else:
                         enemy += self._board[r][c][1]
@@ -76,12 +75,13 @@ class Agent:
         Initialise the agent.
         """
         self._color = color
+        self._total_time = 0
         if color==PlayerColor.RED:
             self._enemy = PlayerColor.BLUE
         else:
             self._enemy = PlayerColor.RED
         self._turn = 0
-        self._state = boardState(self._color, self._turn, None)
+        self._state = boardState(self._turn, None)
         match color:
             case PlayerColor.RED:
                 print("Testing: MiniMax Agent is playing as red")
@@ -118,9 +118,9 @@ class Agent:
              
     def minimax(self, state, depth, max_depth, player, alpha, beta):
         if state.reachedTerminal() or depth==max_depth:
-            if (self._turn <= SUPER_EARLY_GAME):
-                return self.super_early_game(state)
-            elif (SUPER_EARLY_GAME <= self._turn < EARLY_GAME): 
+            if (self._turn <= OPENING_GAME):
+                return self.opening_game(state)
+            elif (OPENING_GAME <= self._turn < EARLY_GAME): 
                 return self.early_game(state)
             elif (EARLY_GAME <= self._turn < MID_GAME):
                 return self.mid_game(state)
@@ -145,17 +145,20 @@ class Agent:
         return best_score
 
     def best_move(self, state, player):
-        start_time = time.time()
+        curr_time = time.time()
         best_score = -1e8
         best_moves = []
         moves = self.generate_moves(player, state)
         for move in moves:
-            curr_time = time.time()
-            if curr_time-start_time>8:
-                return self.greedymove(state, player, moves)
+            # curr_time = time.time()
+            # if curr_time-start_time>8:
+            #     return self.greedymove(state, player, moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
-            if self.num_cell_diff(new_state)>=8 or self.total_power_diff(new_state)>=8:
+            if self.num_cell_diff(new_state)>=14 or self.total_power_diff(new_state)>=12:
+                end_time = time.time()
+                self._total_time += (end_time - curr_time)
+                print(self._total_time)
                 return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
@@ -165,9 +168,15 @@ class Agent:
             elif score == best_score:  # append to best_moves
                 best_moves.append(move)
         if len(best_moves) == 0:
+            end_time = time.time()
+            self._total_time += (end_time - curr_time)
+            print(self._total_time)
             return self.randomMove(state, player)
         else:
             best_move = best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
+            end_time = time.time()
+            self._total_time += (end_time - curr_time)
+            print("total time taken for agent to make moves: " + str(self._total_time))
             return best_move
     
     def greedymove(self, state, player, moves):
@@ -183,8 +192,7 @@ class Agent:
         return best_moves[0] if len(best_moves)==1 else random.choice(best_moves)  
     
     # STUFF TO DO WITH EVALUATION FUNCTIONS
-    
-    def super_early_game(self, state):
+    def opening_game(self, state):
         if (self.get_power(state, self._color)==0):
             return -1e7
         if (self.get_power(state, self._enemy)==0):
@@ -194,7 +202,7 @@ class Agent:
         connectivity_diff = player_connectivity - enemy_connectivity
         num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
-        return 0.7*num_cell_diff + 0.3*total_power_diff
+        return 0.25*total_power_diff + 0.5*num_cell_diff + 0.25*connectivity_diff
     
     def early_game(self, state):
         if (self.get_power(state, self._color)==0):
@@ -206,30 +214,27 @@ class Agent:
         connectivity_diff = player_connectivity - enemy_connectivity
         num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
-        return 0.4*total_power_diff + 0.5*num_cell_diff + 0.1*connectivity_diff
+        return 0.5*total_power_diff + 0.4*num_cell_diff + 0.1*connectivity_diff
 
     def mid_game(self, state):
         if (self.get_power(state, self._color)==0):
             return -1e7
         if (self.get_power(state, self._enemy)==0):
             return 1e7
+        total_power_diff = self.total_power_diff(state)
         player_connectivity = self.count_connected_components(state, self._color)
         enemy_connectivity = self.count_connected_components(state, self._enemy)
         connectivity_diff = player_connectivity - enemy_connectivity
-        mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
-        total_power_diff = self.total_power_diff(state)
         num_cell_diff = self.num_cell_diff(state)
-        return 0.5*total_power_diff + 0.18*connectivity_diff + 0.3*num_cell_diff + 0.02*mobility_diff
+        return 0.7*total_power_diff + 0.2*num_cell_diff + 0.1*connectivity_diff
     
     def late_game(self, state):
         if (self.get_power(state, self._color)==0):
             return -1e7
         if (self.get_power(state, self._enemy)==0):
             return 1e7
-        player_connectivity = self.count_connected_components(state, self._color)
-        enemy_connectivity = self.count_connected_components(state, self._enemy)
-        connectivity_diff = player_connectivity - enemy_connectivity
         total_power_diff = self.total_power_diff(state)
+        num_cell_diff = self.num_cell_diff(state)
         return total_power_diff
     
     def num_cell_diff(self, state):
@@ -272,64 +277,6 @@ class Agent:
         # consider how many moves you can make compared to enemy
         return player_power - enemy_power
     
-    def hybrid_eval_fn(self, state):
-        # consider player power compared to enemy power after a move
-        player_power, enemy_power = 0, 0
-        player_cells, enemy_cells = 0, 0
-        board = state._board
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c] is not None:
-                    if board[r][c][0] == self._color:
-                        player_power += board[r][c][1]
-                        player_cells += 1
-                    else:
-                        enemy_power += board[r][c][1]
-                        enemy_cells += 1
-        # consider how many moves you can make compared to enemy
-        return 0.7*(player_power - enemy_power) + 0.3*(player_cells - enemy_cells)
-    
-    def adv_eval_fn(self, state):
-        # consider player power compared to enemy power after a move
-        player_power, enemy_power = 0, 0
-        board = state._board
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c] is not None:
-                    if board[r][c][0] == self._color:
-                        player_power += board[r][c][1]
-                    else:
-                        enemy_power += board[r][c][1]
-        # consider how many moves you can make compared to enemy
-        spawn_mobility_diff = len(self.generate_spawns(self._color, state)) - len(self.generate_spawns(self._enemy, state))
-        return 0.9*(player_power - enemy_power) + 0.1*(spawn_mobility_diff)
-    
-    def generate_spawns(self, player, state):
-        board = state._board
-        # Use a set to store the enemy cells
-        enemy_cells = set()
-        for r in range(BOARD_SIZE):
-            for c in range(BOARD_SIZE):
-                if board[r][c] is not None and board[r][c][0] != player:
-                    enemy_cells.add((HexPos(r, c), board[r][c][1]))
-        # Use a list comprehension or filter to generate valid_spawns
-        valid_spawns = [HexPos(r, c) for r in range(BOARD_SIZE) for c in range(BOARD_SIZE) 
-                        if board[r][c] is None and 
-                        not any(self.dist(HexPos(r, c), enemy_cell[0]) <= enemy_cell[1] for enemy_cell in enemy_cells)]
-        spawn_moves = [SpawnAction(pos) for pos in valid_spawns]
-        return spawn_moves
-    
-    def dist(self, cell1, cell2):
-        board_size = BOARD_SIZE
-        dx = abs(cell1.q - cell2.q)
-        dy = abs(cell1.r - cell2.r)
-        if dx > board_size / 2:
-            dx = board_size - dx
-        if dy > board_size / 2:
-            dy = board_size - dy
-        d = math.sqrt(dx ** 2 + dy ** 2)
-        return board_size - d if dx == 0 or dy == 0 or dx == dy else d
-    
     def generate_ordered_moves(self, player, state):
         possible_moves = []
         validBoard = state.validTotalBoardPower()
@@ -355,7 +302,7 @@ class Agent:
         return [move for move, _ in moves_with_eval]
         
     def applyMovetoBoard(self, state, action, maximising_player):
-        new_state = boardState(maximising_player, self._turn, state._board)
+        new_state = boardState(self._turn, state._board)
         new_board = new_state._board
         match action:
             case SpawnAction(cell):

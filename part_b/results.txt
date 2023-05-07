@@ -1,0 +1,23 @@
+power v powercellstrat
+power: 3
+powercellstrat: 3
+reached-343: 
+    power: 2
+    powercellstrat: 1
+    draw: 0
+
+powercellstrat v mobility
+powercellstrat: 4
+mobility: 0
+reached-343: 
+    powercellstrat: 0
+    mobility: 0
+    draw: 0
+
+powercellstrat v connectivity
+powercellstrat: 4
+connectivity: 0
+reached-343: 
+    powercellstrat: 0
+    connectivity: 0
+    draw: 0
