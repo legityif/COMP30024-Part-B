@@ -3,12 +3,13 @@
 
 BOARD_SIZE = 7
 MINIMAX_DEPTH = 3
-NUM_PLAYTHROUGHS = 10
+NUM_PLAYTHROUGHS = 100
 LATE_GAME = 50
 
 import random, math
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
+from collections import deque
 DIRECTIONS = (HexDir.Up, HexDir.UpLeft, HexDir.UpRight, HexDir.Down, HexDir.DownLeft, HexDir.DownRight)
 
 class Node:
@@ -25,6 +26,7 @@ class Node:
 
 class boardState:
     def __init__(self, color, turn, board=None):
+        # self._color should be the player that just made the move!
         if board is None:
             self._board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         else:
@@ -42,6 +44,9 @@ class boardState:
         return power<49
     
     def reachedTerminal(self):
+        # color rn should be the player that just made the move!
+        # print("\n in board state: -------------------------\n")
+        # print("in board state, turn is ", self._turn, "board is", self._board, "color is", self._color)
         player, enemy = 0, 0
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
@@ -50,7 +55,8 @@ class boardState:
                         player += self._board[r][c][1]
                     else:
                         enemy += self._board[r][c][1]
-        if (player==0 and self._turn!=0) or (enemy==0 and self._turn!=0) or (player==0 and enemy==0 and (self._turn!=0)) or self._turn==343:
+        #print("player: ", player, "enemy: ", enemy)
+        if (player==0 and self._turn != 1) or (enemy==0 and self._turn!=1) or (player==0 and enemy==0 and (self._turn!=0)) or self._turn==343:
             return True
         return False
         
@@ -105,50 +111,193 @@ class Agent:
                 self._turn += 1 
                 return self.MCTS(self._state, self._color) 
     
-    def simulate(self, node):
-        #simulate the game using a strategy, could be random moves
+    def simulate(self, node, player):
+        #simulate the game using a strategy, could be random moves, the first move should be player's move
+        # print("\nsimulating: ----------------------------")
+        # print("turn is ", node.state._turn, "player is: ", player)
+        # print("in simulate, board is", node.state._board)
+        #print("in simulate, color is ", player)
+        curr_node = node
+        curr_player = player
+        curr_turn = node.state._turn
+        #print("turn is: ", curr_turn)
+        while curr_node.state.reachedTerminal() == False:
+            #print("\nnot in terminal state, player is:", curr_player)
+            possible_moves = self.generate_moves(curr_player, curr_node.state)
+            move = self.randomMove(possible_moves)
+            #print("move is: ", move)
+            new_state = self.applyMovetoBoard(curr_node.state, move, curr_player)
+            curr_node = Node(move, new_state)
+            curr_player = PlayerColor.RED if PlayerColor.BLUE == curr_player else PlayerColor.BLUE
+        
+        # calculate result, every win/loss is calculated in terms of self.player (our actual agent color)
+        # print("---after simulation, turn is ", curr_node.state._turn)
+        # if curr_node.state._turn == 343:
+        #     print("draw")
+        #     return 0
+        if self.power_eval_fn(curr_node.state) > 5:
+            #print("positive power")
+            return 1
+        elif self.power_eval_fn(curr_node.state) > 0:
+            #print("somewhat positive power")
+            return 0.5
+        else:
+            #print("negative")
+            return 0
+        
+    
+    def selection(self, root, player):
+        # select using UCB, assume that when this function is called, all children of root node are expanded
+        # all nodes in the tree have a max_UCB value of their subtree, and every node has their own UCB value 
+        
+        print("-------------------tree max: ", root.max_subtree_UCB)
+        node = root
+        while len(node.children) > 0:
+            max_UCB_child = None
+            for child in node.children:
+                #print("for this child, color is: ", child.state._color, ",UCB is", child.UCB)
+                if abs(child.max_subtree_UCB - root.max_subtree_UCB) <= 0.0001:
+                    print("max subtree ucb child found", child.max_subtree_UCB)
+                    max_UCB_child = child
+                    break
+
+            if max_UCB_child == None:
+                print("error in selection")
+                return None
+            
+            print("here")
+            node = max_UCB_child
+            print("node UCB", node.UCB)
+            if abs(node.UCB - root.max_subtree_UCB) <= 0.0001:
+                return node
+            
+            result = []
+            queue = deque([root])
+            while queue:
+                node = queue.popleft()
+                result.append(node)
+                
+                for child in node.children:
+                    queue.append(child)
+
+            for child in result:
+                print("child has UCB: ", child.UCB)
+
+
+        print("best UCB not found, error")
+
         return None
     
-    def selection(self, node):
-        # select using UCB
-        return None
+    def calculate_UCB(self, node):
+        constant = math.sqrt(2)
+        if node.parent == None:
+            #print("root node")
+            return 0
+        if node.visits==0 or node.parent.visits==0:
+            print("division error in calculate_UCB")
+            return None
+        return node.wins / node.visits + constant * math.sqrt(math.log(node.parent.visits)/node.visits)
     
-    def expand(self, node):
+    def expand(self, node, player):
         # Add one child node to the given node, using an expansion strategy
-        return None
+        # player is the player that just made the move
+        next_player = PlayerColor.RED if PlayerColor.BLUE==player else PlayerColor.BLUE
+        possible_moves = self.generate_moves(next_player, node.state)
+        move = self.randomMove(possible_moves)
+        new_state = self.applyMovetoBoard(node.state, move, next_player)
+        new_node = Node(move, new_state, node)
+        node.children.append(new_node)
+
+        return new_node
     
     def backpropagate(self, node, value):
         # Propagate upwards, updating the wins / visits, also update the max_UCB and its own UCB, 
         # as well as the direct children's UCB of each node on the way up
 
-        return None
+        # first update all the wins and visits by propagating upwards
+        curr_node = node
+        while curr_node is not None:
+            curr_node.visits += 1
+            curr_node.wins += value if node.state._color == self._color else 1-value
+            value = 1-value
+            curr_node = curr_node.parent
+
+        # Then do backpropagation again, this time updating the UCB values
+        # TODO: might be doing double updates on some nodes, could speed up? 
+        curr_node = node
+        curr_max = 0
+        while curr_node is not None:
+            # update UCB of any direct children first
+            for child in curr_node.children:
+                child.UCB = self.calculate_UCB(child)
+                child.max_subtree_UCB = max(child.max_subtree_UCB, child.UCB)
+                curr_node.max_subtree_UCB = max(curr_node.max_subtree_UCB, child.max_subtree_UCB)
+            # then update the curr_node's own UCB
+            curr_node.UCB = self.calculate_UCB(curr_node)
+            curr_node.max_subtree_UCB = max(curr_node.max_subtree_UCB, curr_node.UCB)
+
+            # for testing 
+            curr_max = max(curr_max, curr_node.max_subtree_UCB)
+
+            curr_node = curr_node.parent
+
+        print("\n in propagate, max UCB in the tree is: ", curr_max)
+        return
 
     
     def MCTS(self, state, player):
         # Do play through once for all the children of root node
+        print("|||| MCTS: -----------------------------------\n")
         root = Node(None, state)
 
         moves = self.generate_moves(player, state)
         for move in moves:
+
+            #print("in MCTS, move is: ", move, "player is: ", player)
             child_state = self.applyMovetoBoard(state, move, player)
-            child_node = Node(move, child_state)
+            #print("turn is: ", child_state._turn)
+            child_node = Node(move, child_state, root)
             root.children.append(child_node)
 
-            self.simulate(child_node)
+            # start with opponent's move in the simulation
+            result = self.simulate(child_node, PlayerColor.RED if player==PlayerColor.BLUE else PlayerColor.BLUE)
+
+            # propagate results and deal with initila UCB
+            root.visits += 1
+            root.wins += result
+
+            child_node.visits += 1
+            child_node.wins += result
+            child_node.max_subtree_UCB = child_node.UCB = self.calculate_UCB(child_node)
+
+            root.max_subtree_UCB = max(root.max_subtree_UCB, child_node.max_subtree_UCB)
         
+        total = 0
+        for child in root.children:
+            #print("child node wins:", child.wins, "visits: ", child.visits)
+            total += child.wins
+        print("total is:", total, "root total: ", root.wins, "root visits: ", root.visits, "max_UCB: ", root.max_subtree_UCB)
+
         # do a number of playthroughs using MCTS algorithm
         for i in range(NUM_PLAYTHROUGHS):
+            print("iteration number: ", i)
+            
+            # TODO:  need to think about what happens with player color!
+            node = self.selection(root, player)
+            #print("selected node has UCB: ", node.UCB, "root max UCB: ", root.max_subtree_UCB)
+            #print("color of node is:", node.state._color)
 
-            node = self.selection(root)
+            new_node = self.expand(node, node.state._color)
+            #print("expanded node is: ", new_node.state._board, " color is: ", new_node.state._color)
 
-            new_node = self.expand(node)
-
-            result = self.simulate(new_node)
+            next_player = PlayerColor.RED if new_node.state._color == PlayerColor.BLUE else PlayerColor.BLUE
+            result = self.simulate(new_node, next_player)
 
             self.backpropagate(new_node, result)
 
         # find the best move
         best_child = max(root.children, key=lambda x: x.wins / x.visits if x.visits != 0 else 0)
+        print("best move found:", best_child.state._board, "color is: ", best_child.state._color)
             
         if best_child == None:
             print("error no best move")
@@ -216,26 +365,30 @@ class Agent:
                         not any(self.dist(HexPos(r, c), enemy_cell[0]) <= enemy_cell[1] for enemy_cell in enemy_cells)]
         spawn_moves = [SpawnAction(pos) for pos in valid_spawns]
         return spawn_moves
+    
+    def randomMove(self, possible_moves):
+        rand_move = random.randint(0, len(possible_moves)-1)
+        return possible_moves[rand_move]
         
-    def applyMovetoBoard(self, state, action, maximising_player):
-        new_state = boardState(maximising_player, self._turn, state._board)
+    def applyMovetoBoard(self, state, action, curr_player):
+        new_state = boardState(curr_player, state._turn+1, state._board)
         new_board = new_state._board
         match action:
             case SpawnAction(cell):
                 # for both agent colours, add to board 
-                if PlayerColor.RED == maximising_player:
-                    new_board[cell.r][cell.q] = (maximising_player, 1)
-                if PlayerColor.BLUE == maximising_player:
-                    new_board[cell.r][cell.q] = (maximising_player, 1)
+                if PlayerColor.RED == curr_player:
+                    new_board[cell.r][cell.q] = (curr_player, 1)
+                if PlayerColor.BLUE == curr_player:
+                    new_board[cell.r][cell.q] = (curr_player, 1)
                 return new_state
             case SpreadAction(cell, direction):
                 orig_cell = cell
-                if PlayerColor.RED == maximising_player:
+                if PlayerColor.RED == curr_player:
                     # call spread to update board
-                    self.spreadInDir(new_board, direction, cell, orig_cell, new_board[cell.r][cell.q][1], maximising_player)
-                if PlayerColor.BLUE == maximising_player:
+                    self.spreadInDir(new_board, direction, cell, orig_cell, new_board[cell.r][cell.q][1], curr_player)
+                if PlayerColor.BLUE == curr_player:
                     # call spread to update board
-                    self.spreadInDir(new_board, direction, cell, orig_cell, new_board[cell.r][cell.q][1], maximising_player)
+                    self.spreadInDir(new_board, direction, cell, orig_cell, new_board[cell.r][cell.q][1], curr_player)
                 return new_state
     
     def spreadInDir(self, board, direction, cell, orig_cell, power, colour):
