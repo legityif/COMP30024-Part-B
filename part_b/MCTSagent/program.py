@@ -377,11 +377,11 @@ class Agent:
 
             root.max_subtree_UCB = max(root.max_subtree_UCB, child_node.max_subtree_UCB)
         
-        total = 0
-        for child in root.children:
-            #print("child node wins:", child.wins, "visits: ", child.visits)
-            total += child.wins
-        print("total is:", total, "root total: ", root.wins, "root visits: ", root.visits, "max_UCB: ", root.max_subtree_UCB)
+        # total = 0
+        # for child in root.children:
+        #     #print("child node wins:", child.wins, "visits: ", child.visits)
+        #     total += child.wins
+        # print("total is:", total, "root total: ", root.wins, "root visits: ", root.visits, "max_UCB: ", root.max_subtree_UCB)
 
         # do a number of playthroughs using MCTS algorithm
         for i in range(NUM_PLAYTHROUGHS):
@@ -418,7 +418,7 @@ class Agent:
 
         # find the best move
         best_child = max(root.children, key=lambda x: x.wins / x.visits if x.visits != 0 else 0)
-        print("best move found:", best_child.state._board, "color is: ", best_child.state._color)
+        #print("best move found:", best_child.state._board, "color is: ", best_child.state._color)
             
         if best_child == None:
             print("error no best move")
