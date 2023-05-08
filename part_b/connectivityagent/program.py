@@ -145,20 +145,17 @@ class Agent:
         return best_score
 
     def best_move(self, state, player):
-        curr_time = time.time()
+        start_time = time.time()
         best_score = -1e8
         best_moves = []
         moves = self.generate_moves(player, state)
         for move in moves:
-            # curr_time = time.time()
-            # if curr_time-start_time>8:
-            #     return self.greedymove(state, player, moves)
+            curr_time = time.time()
+            if curr_time-start_time>8:
+                return self.greedymove(state, player, moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
             if self.num_cell_diff(new_state)>=14 or self.total_power_diff(new_state)>=12:
-                end_time = time.time()
-                self._total_time += (end_time - curr_time)
-                print(self._total_time)
                 return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
@@ -168,15 +165,9 @@ class Agent:
             elif score == best_score:  # append to best_moves
                 best_moves.append(move)
         if len(best_moves) == 0:
-            end_time = time.time()
-            self._total_time += (end_time - curr_time)
-            print(self._total_time)
-            return self.randomMove(state, player)
+            return self.greedymove(state, player, moves)
         else:
             best_move = best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
-            end_time = time.time()
-            self._total_time += (end_time - curr_time)
-            print("total time taken for agent to make moves: " + str(self._total_time))
             return best_move
     
     def greedymove(self, state, player, moves):
@@ -202,7 +193,7 @@ class Agent:
         connectivity_diff = player_connectivity - enemy_connectivity
         num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
-        return 0.25*total_power_diff + 0.5*num_cell_diff + 0.25*connectivity_diff
+        return 0.3*total_power_diff + 0.5*num_cell_diff + 0.2*connectivity_diff
     
     def early_game(self, state):
         if (self.get_power(state, self._color)==0):
@@ -235,7 +226,7 @@ class Agent:
             return 1e7
         total_power_diff = self.total_power_diff(state)
         num_cell_diff = self.num_cell_diff(state)
-        return total_power_diff
+        return 0.95*total_power_diff + 0.05*num_cell_diff
     
     def num_cell_diff(self, state):
         # consider player power compared to enemy power after a move
