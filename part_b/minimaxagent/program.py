@@ -4,8 +4,7 @@
 from referee.game import \
     PlayerColor, Action, SpawnAction, SpreadAction, HexPos, HexDir
 import random, math, time
-
-
+from collections import deque
 
 # Define agent constants and game settings
 DIRS = [HexDir.DownRight, HexDir.Down, HexDir.DownLeft, HexDir.UpLeft, HexDir.Up, HexDir.UpRight]
@@ -212,13 +211,13 @@ class board_state:
         # TRY IMPLEMENT DANGER LEVEL EVAL
         
         if self.turn < 15:
-            our_connected_components = connected_components(board, color)
-            opponent_connected_components = connected_components(board, color.opponent)
+            player_cc =  connected_components(board, color)
+            opponent_cc = connected_components(board, color.opponent)
             danger_level = danger(self)
             #value = 0.2*(our_power - opponent_power) + 0.45*(num_our_cells - num_opponent_cells) #+ 0.35*(our_connected_components - opponent_connected_components)
             # value = 0.2*(self.power - self.opponent_power) + 0.45*(self.num_pieces - self.num_opponent) + 0.35*(our_connected_components - opponent_connected_components) + 0.25*(self.power/self.num_pieces) - 0.1*(danger_level)
-            value = 0.2*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.55*(our_connected_components - opponent_connected_components)
-            #- 0.1*(danger_level)
+            # value = 0.2*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.55*(our_connected_components - opponent_connected_components) - 0.1*(danger_level)
+            value = 0.3*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.35*(player_cc - opponent_cc) - 0.03*danger_level
         elif 15 >= self.turn > 50:
             our_mobility = mobility(board, color)
             opponent_mobility = mobility(board, color.opponent)
@@ -321,8 +320,8 @@ def connected_components(board, color):
     # print(board, connected)
     if not connected:
         return 0
-    # Returns average size of connected components and largest component size
-    return 0.5*(sum(len(component) for component in connected))/len(connected) + 0.5*max(len(component) for component in connected)
+    # Returns size of connected components and largest component size
+    return 0.3 * len(connected) + 0.5 * max([len(component) for component in connected])
 
 def dfs(pos, board, visited, group, color):
     visited.add(pos)
