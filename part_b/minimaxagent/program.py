@@ -212,12 +212,11 @@ class board_state:
         
         if self.turn < 15:
             player_cc =  connected_components(board, color)
-            opponent_cc = connected_components(board, color.opponent)
             danger_level = danger(self)
             #value = 0.2*(our_power - opponent_power) + 0.45*(num_our_cells - num_opponent_cells) #+ 0.35*(our_connected_components - opponent_connected_components)
             # value = 0.2*(self.power - self.opponent_power) + 0.45*(self.num_pieces - self.num_opponent) + 0.35*(our_connected_components - opponent_connected_components) + 0.25*(self.power/self.num_pieces) - 0.1*(danger_level)
             # value = 0.2*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.55*(our_connected_components - opponent_connected_components) - 0.1*(danger_level)
-            value = 0.25*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.25*(player_cc - opponent_cc) - 0.1*danger_level 
+            value = 0.25*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.25*player_cc - 0.1*danger_level 
             # print(color, board, value)
         elif 15 >= self.turn > 50:
             our_mobility = mobility(board, color)
@@ -309,7 +308,7 @@ def connected_components(board, color):
     if not connected:
         return 0
     # Returns size of connected components and largest component size
-    return 0.3 * len(connected) + 0.5 * max([len(component) for component in connected])
+    return 0.3 * max([len(component) for component in connected]) - 0.5 * len(connected)
 
 def dfs(pos, board, visited, group, color):
     visited.add(pos)
@@ -346,19 +345,19 @@ def danger(state):
                 danger += 1
             if cell in get_neighbors((r, q), board, opponent_color):
                 danger -= 2
-    if isinstance(move, SpreadAction):
-        # only consider spreads with one power
-        next_pos = move.cell + move.direction
-        cell = (next_pos.r, next_pos.q)
-        if board.get(cell)[1] == 1: 
-            direction = move.direction
-            dr, dq = direction.__getattribute__('r'), direction.__getattribute__('q')
-            new_cell = ((cell[0] + dr) % MAX_POWER, (cell[1] + dq) % MAX_POWER)
-            for (r, q) in board.keys():
-                if new_cell in get_neighbors((r, q), board, board_color):
-                    danger += 1
-                if new_cell in get_neighbors((r, q), board, opponent_color):
-                    danger -= 2
+    # if isinstance(move, SpreadAction):
+    #     # only consider spreads with one power
+    #     next_pos = move.cell + move.direction
+    #     cell = (next_pos.r, next_pos.q)
+    #     if board.get(cell)[1] == 1: 
+    #         direction = move.direction
+    #         dr, dq = direction.__getattribute__('r'), direction.__getattribute__('q')
+    #         new_cell = ((cell[0] + dr) % MAX_POWER, (cell[1] + dq) % MAX_POWER)
+    #         for (r, q) in board.keys():
+    #             if new_cell in get_neighbors((r, q), board, board_color):
+    #                 danger += 1
+    #             if new_cell in get_neighbors((r, q), board, opponent_color):
+    #                 danger -= 2
     # print(move, move.cell, board, danger)
     return danger
 
@@ -421,29 +420,3 @@ def update_board(input: dict[tuple, tuple], r, q, direction: HexDir):
             input[(new_r, new_q)] = (input[(r,q)][0], 1)
 
     del input[(r, q)]
-
-def get_symmetric(board):
-    symmetries = []
-    rotation1 = {}
-    rotation2 = {}
-    rotation3 = {}
-    rotation4 = {}
-    rotation5 = {}
-    rotation6 = {}
-    rotation7 = {}
-    for r,q in board:
-        rotation1[(r,-q+6)] = board[(r,q)]
-        rotation2[(-r+6, q)] = board[(r,q)]
-        rotation3[(-r+6, -q+6)] = board[(r,q)]
-        rotation4[(q, r)] = board[(r,q)]
-        rotation5[(-q+6, r)] = board[(r,q)]
-        rotation6[(-q+6, -r+6)] = board[(r,q)]
-        rotation7[(q, -r+6)] = board[(r,q)]
-    symmetries.append(rotation1)
-    symmetries.append(rotation2)
-    symmetries.append(rotation3)
-    symmetries.append(rotation4)
-    symmetries.append(rotation5)
-    symmetries.append(rotation6)
-    symmetries.append(rotation7)
-    return symmetries

@@ -81,6 +81,7 @@ class MonteCarloNode:
     def pre_expand(self,simulation:int,exploration_constant:int):
         possible_actions = self.get_all_moves(self.winner)
         for action in possible_actions:
+
             child = MonteCarloNode(self.board._state,self.winner,self.loser)
             child.board._turn_color = self.board._turn_color
             child.parent = self
@@ -100,7 +101,10 @@ class MonteCarloNode:
             else:
                 if(is_safe(child,action.cell+action.direction)):
                     child.val+=0.01
-            child.val += 0.01*child.board._color_power(self.winner)
+            if(len(child.board._player_cells(self.winner)) <= 10):
+                child.val += 0.01*child.board._color_power(self.winner)
+            else:
+                child.val += 0.01*child.get_score()
             child.visit+=1
             self.visit+=1
 
@@ -128,27 +132,23 @@ class MonteCarloNode:
             copy.board.apply_action(action)
             start+=1
         
-        # if(start>=simulation):
-        #     if(copy.get_score() < -constants.MAX_CELL_POWER):
-        #         return -1
-        #     elif(copy.get_score() > constants.MAX_CELL_POWER):
-        #         return 1
-        #     elif(wanted_winner==PlayerColor.RED):
-        #         if(copy.get_score() < 0):
-        #             return -0.25 + 0.1*copy.get_score()
-        #         elif(copy.get_score() > 0):
-        #             return 0.25 +  0.1*copy.get_score()
-        #     elif(wanted_winner == PlayerColor.BLUE):
-        #         if(copy.get_score() < -1):
-        #             return -0.25 +  0.1*copy.get_score()
-        #         elif(copy.get_score() > 1):
-        #             return 0.25 +  0.1*copy.get_score()
-        #     else:
-        #         return 0
+        if(start>=simulation):
+            if(copy.get_score() < -2*constants.MAX_CELL_POWER):
+                return -1
+            elif(copy.get_score() > 2*constants.MAX_CELL_POWER):
+                return 1
+            elif(wanted_winner==PlayerColor.RED):
+                if(copy.get_score() > 0):
+                    return 0.0025 +  0.0001*copy.get_score()
+            elif(wanted_winner == PlayerColor.BLUE):
+                if(copy.get_score() > 0):
+                    return 0.0025 +  0.001*copy.get_score()
+            else:
+                return 0
         if(copy.board.winner_color==wanted_winner):
-            return 1.25
+            return 1
         if(copy.board.winner_color==loser_color):
-            return -1.25
+            return -1
         else:
             return 0
     
@@ -244,13 +244,13 @@ class Agent:
                 self.turn_count+=2
                 if(self.board._total_power == 0):
                     return SpawnAction(HexPos(3,3))
-                return MonteCarloSearch(self.root,300,20,2,self.turn_count)
+                return MonteCarloSearch(self.root,300,20,math.sqrt(2),self.turn_count)
             case PlayerColor.BLUE:
                 self.turn_count+=2
                 if(self.board._color_power(self._color) == 0):
                     return safeSpawn(self.board,self._color)
                 self.root.board._turn_color = PlayerColor.BLUE
-                return MonteCarloSearch(self.root,300,20,math.sqrt(2),self.turn_count)
+                return MonteCarloSearch(self.root,300, 20, math.sqrt(2),self.turn_count)
 
     def turn(self, color: PlayerColor, action: Action, **referee: dict):
         """

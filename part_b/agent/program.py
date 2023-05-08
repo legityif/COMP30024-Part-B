@@ -8,7 +8,7 @@ EARLY_GAME = 30
 MID_GAME = 50
 LATE_GAME = 70
 MOVE_TIME_LIMIT = 6
-MAX_TIME_LIMIT = 150
+MAX_TIME_LIMIT = 160
 
 import random, math
 import time
@@ -117,7 +117,7 @@ class Agent:
         """       
         self._turn += 1 
         return self.best_move(self._state, self._color)
-             
+    
     def minimax(self, state, depth, max_depth, player, alpha, beta):
         if state.reachedTerminal() or depth==max_depth:
             if (self._turn <= OPENING_GAME):
@@ -378,25 +378,6 @@ class Agent:
             power-=1
         board[orig_cell.r][orig_cell.q] = None
         cell = orig_cell
-    
-    # def count_connected_components(self, state, player):
-    #     board = state._board
-    #     visited = set()
-    #     count = 0
-    #     for r in range(len(board)):
-    #         for c in range(len(board[0])):
-    #             if (r, c) not in visited and board[r][c] is not None and board[r][c][0]==player:
-    #                 count += 1
-    #                 queue = [(r, c)]
-    #                 visited.add((r, c))
-    #                 while queue:
-    #                     row, col = queue.pop(0)
-    #                     for dr, dc in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
-    #                         new_r, new_c = row + dr, col + dc
-    #                         if 0 <= new_r < len(board) and 0 <= new_c < len(board[0]) and (new_r, new_c) not in visited and board[new_r][new_c] is not None and board[new_r][new_c][0] == board[r][c][0]:
-    #                             queue.append((new_r, new_c))
-    #                             visited.add((new_r, new_c))
-    #     return count
     
     def count_connected_components(self, state, player):
         board = state._board
