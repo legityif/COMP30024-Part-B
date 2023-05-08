@@ -217,7 +217,8 @@ class board_state:
             #value = 0.2*(our_power - opponent_power) + 0.45*(num_our_cells - num_opponent_cells) #+ 0.35*(our_connected_components - opponent_connected_components)
             # value = 0.2*(self.power - self.opponent_power) + 0.45*(self.num_pieces - self.num_opponent) + 0.35*(our_connected_components - opponent_connected_components) + 0.25*(self.power/self.num_pieces) - 0.1*(danger_level)
             # value = 0.2*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.55*(our_connected_components - opponent_connected_components) - 0.1*(danger_level)
-            value = 0.3*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.35*(player_cc - opponent_cc) - 0.03*danger_level
+            value = 0.25*(our_power - opponent_power) + 0.35*(num_our_cells - num_opponent_cells) + 0.25*(player_cc - opponent_cc) - 0.1*danger_level 
+            # print(color, board, value)
         elif 15 >= self.turn > 50:
             our_mobility = mobility(board, color)
             opponent_mobility = mobility(board, color.opponent)
@@ -232,19 +233,6 @@ class board_state:
         global evaltime
         evaltime += time.time() - start_time
         return value
-
-    def minimax_eval(self):
-        board = self.board
-        color = self.color
-        our_power = count_power(board, color)
-        opponent_power = count_power(board, color.opponent)
-        num_our_cells = count_color(board, color)
-        num_opponent_cells = count_color(board, color.opponent)
-        if num_our_cells == 0:
-            return float("-inf")
-        if num_opponent_cells == 0:
-            return float("inf")
-        return 1.5*(our_power/num_our_cells) - (opponent_power/num_opponent_cells) + num_our_cells - 1.75*num_opponent_cells
 
     def greedy_eval(self):
         board = self.board
@@ -350,14 +338,14 @@ def danger(state):
     move = state.move
     board_color = 'r' if state.color == PlayerColor.RED else 'b'
     opponent_color = 'r' if board_color == 'b' else 'r'
-    attacked, defended = 0, 0
+    danger = 0
     if isinstance(move, SpawnAction):
         cell = (move.cell.__getattribute__("r"), move.cell.__getattribute__("q"))
         for (r, q) in board.keys():
             if cell in get_neighbors((r, q), board, board_color):
-                attacked += 1
+                danger += 1
             if cell in get_neighbors((r, q), board, opponent_color):
-                defended += 1
+                danger -= 2
     if isinstance(move, SpreadAction):
         # only consider spreads with one power
         next_pos = move.cell + move.direction
@@ -368,10 +356,11 @@ def danger(state):
             new_cell = ((cell[0] + dr) % MAX_POWER, (cell[1] + dq) % MAX_POWER)
             for (r, q) in board.keys():
                 if new_cell in get_neighbors((r, q), board, board_color):
-                    attacked += 1
+                    danger += 1
                 if new_cell in get_neighbors((r, q), board, opponent_color):
-                    defended += 1
-    return attacked - defended
+                    danger -= 2
+    # print(move, move.cell, board, danger)
+    return danger
 
 def generate_options(state, color, sort_moves = False):
     """
