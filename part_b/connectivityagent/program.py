@@ -7,6 +7,7 @@ OPENING_GAME = 15
 EARLY_GAME = 30
 MID_GAME = 50
 LATE_GAME = 70
+MOVE_TIME_LIMIT = 6
 
 import random, math
 import time
@@ -148,17 +149,18 @@ class Agent:
         start_time = time.time()
         best_score = -1e8
         best_moves = []
-        moves = self.generate_moves(player, state)
+        moves = self.generate_ordered_moves(player, state)
         for move in moves:
-            curr_time = time.time()
-            if curr_time-start_time>8:
-                return self.greedymove(state, player, moves)
+            # print(time.time() - start_time)
+            if time.time() - start_time > MOVE_TIME_LIMIT:
+                return random.choice(best_moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
-            if self.num_cell_diff(new_state)>=14 or self.total_power_diff(new_state)>=12:
+            if self.num_cell_diff(new_state)>=10 or self.total_power_diff(new_state)>=12:
                 return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
+            # print(str(move), score)
             if score > best_score:  # update best_score
                 best_score = score
                 best_moves = [move]  # reset best_moves
@@ -167,8 +169,7 @@ class Agent:
         if len(best_moves) == 0:
             return self.greedymove(state, player, moves)
         else:
-            best_move = best_moves[0] if len(best_moves)==1 else random.choice(best_moves)   
-            return best_move
+            return random.choice(best_moves)
     
     def greedymove(self, state, player, moves):
         best_moves = []
@@ -190,10 +191,11 @@ class Agent:
             return 1e7
         player_connectivity = self.count_connected_components(state, self._color)
         enemy_connectivity = self.count_connected_components(state, self._enemy)
-        connectivity_diff = player_connectivity - enemy_connectivity
+        connectivity_diff = enemy_connectivity - player_connectivity
         num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
-        return 0.3*total_power_diff + 0.5*num_cell_diff + 0.2*connectivity_diff
+        safety = self.safety(state)
+        return 0.4*total_power_diff + 0.45*num_cell_diff + 0.1*connectivity_diff + 0.05*safety
     
     def early_game(self, state):
         if (self.get_power(state, self._color)==0):
@@ -202,10 +204,11 @@ class Agent:
             return 1e7
         player_connectivity = self.count_connected_components(state, self._color)
         enemy_connectivity = self.count_connected_components(state, self._enemy)
-        connectivity_diff = player_connectivity - enemy_connectivity
+        connectivity_diff = enemy_connectivity - player_connectivity
         num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
-        return 0.5*total_power_diff + 0.4*num_cell_diff + 0.1*connectivity_diff
+        safety = self.safety(state)
+        return 0.5*total_power_diff + 0.35*num_cell_diff + 0.1*connectivity_diff + 0.05*safety
 
     def mid_game(self, state):
         if (self.get_power(state, self._color)==0):
@@ -213,11 +216,8 @@ class Agent:
         if (self.get_power(state, self._enemy)==0):
             return 1e7
         total_power_diff = self.total_power_diff(state)
-        player_connectivity = self.count_connected_components(state, self._color)
-        enemy_connectivity = self.count_connected_components(state, self._enemy)
-        connectivity_diff = player_connectivity - enemy_connectivity
         num_cell_diff = self.num_cell_diff(state)
-        return 0.7*total_power_diff + 0.2*num_cell_diff + 0.1*connectivity_diff
+        return 0.7*total_power_diff + 0.3*num_cell_diff
     
     def late_game(self, state):
         if (self.get_power(state, self._color)==0):
@@ -241,6 +241,21 @@ class Agent:
                         enemy_cells += 1
         # consider how many moves you can make compared to enemy
         return player_cells - enemy_cells
+    
+    def safety(self, state):
+        safety = 0
+        board = state._board
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c] is not None:
+                    if board[r][c][0] == self._color:
+                        for d in DIRECTIONS:
+                            new_r, new_c = HexPos(r, c) + d
+                            if board[new_r][new_c] == self._color:
+                                safety += 1
+                            else:
+                                safety -=1
+        return safety
     
     def get_power(self, state, player):
         # consider player power compared to enemy power after a move
@@ -282,7 +297,9 @@ class Agent:
                     else:
                         continue 
         # Evaluate moves and sort list
-        if (self._turn < EARLY_GAME):
+        if (self._turn < OPENING_GAME):
+            moves_with_eval = [(move, self.opening_game(self.applyMovetoBoard(state, move, player))) for move in possible_moves]
+        elif (OPENING_GAME <= self._turn < EARLY_GAME):
             moves_with_eval = [(move, self.early_game(self.applyMovetoBoard(state, move, player))) for move in possible_moves]
         elif (EARLY_GAME <= self._turn < MID_GAME):
             moves_with_eval = [(move, self.mid_game(self.applyMovetoBoard(state, move, player))) for move in possible_moves]
@@ -342,6 +359,25 @@ class Agent:
                             new_pos = new_r * len(board[0]) + new_c
                             uf.union(pos, new_pos)
         return uf.get_count()
+    
+    # def count_connected_components(self, state, player):
+    #     board = state._board
+    #     visited = set()
+    #     count = 0
+    #     for r in range(len(board)):
+    #         for c in range(len(board[0])):
+    #             if (r, c) not in visited and board[r][c] is not None and board[r][c][0]==player:
+    #                 count += 1
+    #                 queue = [(r, c)]
+    #                 visited.add((r, c))
+    #                 while queue:
+    #                     row, col = queue.pop(0)
+    #                     for d in DIRECTIONS:
+    #                         new_r, new_c = HexPos(row, col) + d
+    #                         if 0 <= new_r < len(board) and 0 <= new_c < len(board[0]) and (new_r, new_c) not in visited and board[new_r][new_c] is not None and board[new_r][new_c][0] == board[r][c][0]:
+    #                             queue.append((new_r, new_c))
+    #                             visited.add((new_r, new_c))
+    #     return count
     
     def generate_moves(self, player, state):
         possible_moves = []

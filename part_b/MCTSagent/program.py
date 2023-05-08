@@ -2,7 +2,7 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-NUM_PLAYTHROUGHS = 100
+NUM_PLAYTHROUGHS = 1000
 
 import random, math
 from referee.game import \

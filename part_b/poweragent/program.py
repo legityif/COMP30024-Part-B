@@ -138,18 +138,14 @@ class Agent:
         return best_score
 
     def best_move(self, state, player):
-        start_time = time.time()
         best_score = -1e8
         best_moves = []
         moves = self.generate_moves(player, state)
         for move in moves:
-            curr_time = time.time()
-            if curr_time-start_time>8:
-                return self.greedymove(state, player, moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
-            # if self.num_cell_diff(new_state)>=10 or self.total_power_diff(new_state)>=10:
-            #     return self.greedymove(state, player, moves)
+            if self.num_cell_diff(new_state)>=12 or self.total_power_diff(new_state)>=12:
+                return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
             if score > best_score:  # update best_score
@@ -181,51 +177,33 @@ class Agent:
             return -1e7
         if (self.get_power(state, self._enemy)==0):
             return 1e7
-        player_connectivity = self.count_connected_components(state, self._color)
-        enemy_connectivity = self.count_connected_components(state, self._enemy)
-        connectivity_diff = player_connectivity - enemy_connectivity
-        num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
-        return 0.55*num_cell_diff + 0.35*total_power_diff + 0.1*connectivity_diff
+        return total_power_diff
     
     def early_game(self, state):
         if (self.get_power(state, self._color)==0):
             return -1e7
         if (self.get_power(state, self._enemy)==0):
             return 1e7
-        # player_connectivity = self.count_connected_components(state, self._color)
-        # enemy_connectivity = self.count_connected_components(state, self._enemy)
-        # connectivity_diff = player_connectivity - enemy_connectivity
-        num_cell_diff = self.num_cell_diff(state)
+
         total_power_diff = self.total_power_diff(state)
-        return 0.5*total_power_diff + 0.5*num_cell_diff
-        # return 0.4*total_power_diff + 0.5*num_cell_diff + 0.1*connectivity_diff
+        return total_power_diff
 
     def mid_game(self, state):
         if (self.get_power(state, self._color)==0):
             return -1e7
         if (self.get_power(state, self._enemy)==0):
             return 1e7
-        # player_connectivity = self.count_connected_components(state, self._color)
-        # enemy_connectivity = self.count_connected_components(state, self._enemy)
-        # connectivity_diff = player_connectivity - enemy_connectivity
-        mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
         total_power_diff = self.total_power_diff(state)
-        num_cell_diff = self.num_cell_diff(state)
-        return 0.6*total_power_diff + 0.38*num_cell_diff + 0.02*mobility_diff
+        return total_power_diff
     
     def late_game(self, state):
         if (self.get_power(state, self._color)==0):
             return -1e7
         if (self.get_power(state, self._enemy)==0):
             return 1e7
-        # player_connectivity = self.count_connected_components(state, self._color)
-        # enemy_connectivity = self.count_connected_components(state, self._enemy)
-        # connectivity_diff = player_connectivity - enemy_connectivity
-        mobility_diff = len(self.generate_moves(self._color, state)) - len(self.generate_moves(self._enemy, state))
         total_power_diff = self.total_power_diff(state)
-        num_cell_diff = self.num_cell_diff(state)
-        return 0.71*total_power_diff + 0.25*num_cell_diff + 0.04*mobility_diff
+        return total_power_diff
     
     def num_cell_diff(self, state):
         # consider player power compared to enemy power after a move
