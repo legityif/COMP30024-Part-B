@@ -115,6 +115,8 @@ class Agent:
         Return the next action to take.
         """       
         self._turn += 1 
+        if self._total_time > 180:
+            print("-------------------taken too long")
         return self.best_move(self._state, self._color)
              
     def minimax(self, state, depth, max_depth, player, alpha, beta):
@@ -153,10 +155,14 @@ class Agent:
         for move in moves:
             # print(time.time() - start_time)
             if time.time() - start_time > MOVE_TIME_LIMIT:
+                self._total_time += time.time() - start_time
+                print("Total time taken so far: " + str(self._total_time))
                 return random.choice(best_moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
             if self.num_cell_diff(new_state)>=10 or self.total_power_diff(new_state)>=12:
+                self._total_time += time.time() - start_time
+                print("Total time taken so far: " + str(self._total_time))
                 return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
@@ -167,8 +173,12 @@ class Agent:
             elif score == best_score:  # append to best_moves
                 best_moves.append(move)
         if len(best_moves) == 0:
+            self._total_time += time.time() - start_time
+            print("Total time taken so far: " + str(self._total_time))
             return self.greedymove(state, player, moves)
         else:
+            self._total_time += time.time() - start_time
+            print("Total time taken so far: " + str(self._total_time))
             return random.choice(best_moves)
     
     def greedymove(self, state, player, moves):

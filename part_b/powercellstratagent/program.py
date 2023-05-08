@@ -2,7 +2,7 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-MINIMAX_DEPTH = 2
+MINIMAX_DEPTH = 3
 SUPER_EARLY_GAME = 5
 EARLY_GAME = 15
 MID_GAME = 30
