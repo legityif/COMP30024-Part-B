@@ -2,13 +2,13 @@
 # Project Part B: Game Playing Agent
 
 BOARD_SIZE = 7
-MINIMAX_DEPTH = 3
+MINIMAX_DEPTH = 4
 OPENING_GAME = 15
 EARLY_GAME = 30
 MID_GAME = 50
 LATE_GAME = 70
-MOVE_TIME_LIMIT = 6
-MAX_TIME_LIMIT = 150
+MOVE_TIME_LIMIT = 5
+MAX_TIME_LIMIT = 160
 
 import random, math
 import time
@@ -145,7 +145,7 @@ class Agent:
                 if alpha>=beta:
                     return best_score
         return best_score
-
+        
     def best_move(self, state, player):
         start_time = time.time()
         best_score = -1e8
@@ -154,14 +154,17 @@ class Agent:
         for move in moves:
             # shouldn't happen often
             if self._total_time > MAX_TIME_LIMIT:
+                print(self._total_time)
                 return self.greedymove(state, player, moves)
             if time.time() - start_time > MOVE_TIME_LIMIT:
                 self._total_time += time.time() - start_time
+                print(self._total_time)
                 return random.choice(best_moves)
             new_state = self.applyMovetoBoard(state, move, player)
             # if big difference in score, return fast greedy move
             if self.num_cell_diff(new_state)>=10 or self.total_power_diff(new_state)>=12:
                 self._total_time += time.time() - start_time
+                print(self._total_time)
                 return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
@@ -173,9 +176,11 @@ class Agent:
                 best_moves.append(move)
         if len(best_moves) == 0:
             self._total_time += time.time() - start_time
+            print(self._total_time)
             return self.greedymove(state, player, moves)
         else:
             self._total_time += time.time() - start_time
+            print(self._total_time)
             return random.choice(best_moves)
     
     def greedymove(self, state, player, moves):

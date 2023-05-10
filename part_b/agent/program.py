@@ -7,7 +7,7 @@ OPENING_GAME = 15
 EARLY_GAME = 30
 MID_GAME = 50
 LATE_GAME = 70
-MOVE_TIME_LIMIT = 6
+MOVE_TIME_LIMIT = 5
 MAX_TIME_LIMIT = 160
 
 import random, math
@@ -67,7 +67,7 @@ class boardState:
                         player += self._board[r][c][1]
                     else:
                         enemy += self._board[r][c][1]
-        if (player==0 and self._turn!=0) or (enemy==0 and self._turn!=0) or (player==0 and enemy==0 and (self._turn!=0)) or self._turn==343:
+        if (player==0 and self._turn!=0) or (enemy==0 and self._turn!=0) or (player==0 and enemy==0 and (self._turn!=0)) or self._turn==171:
             return True
         return False
         
@@ -122,7 +122,7 @@ class Agent:
         if state.reachedTerminal() or depth==max_depth:
             if (self._turn <= OPENING_GAME):
                 return self.opening_game(state)
-            elif (OPENING_GAME <= self._turn < EARLY_GAME): 
+            elif (OPENING_GAME <= self._turn < EARLY_GAME):
                 return self.early_game(state)
             elif (EARLY_GAME <= self._turn < MID_GAME):
                 return self.mid_game(state)
@@ -165,7 +165,6 @@ class Agent:
                 return self.greedymove(state, player, moves)
             # otherwise do minimax
             score = self.minimax(new_state, 1, MINIMAX_DEPTH, self._enemy, -1e8, 1e8)
-            # print(str(move), score)
             if score > best_score:  # update best_score
                 best_score = score
                 best_moves = [move]  # reset best_moves
@@ -202,7 +201,8 @@ class Agent:
         num_cell_diff = self.num_cell_diff(state)
         total_power_diff = self.total_power_diff(state)
         safety = self.safety(state)
-        return 0.4*total_power_diff + 0.4*num_cell_diff + 0.1*connectivity_diff + 0.05*safety
+        # return 0.4*total_power_diff + 0.4*num_cell_diff + 0.1*connectivity_diff + 0.05*safety
+        return 0.5*total_power_diff + 0.35*num_cell_diff + 0.1*connectivity_diff + 0.05*safety
     
     def early_game(self, state):
         if (self.get_power(state, self._color)==0):
@@ -322,10 +322,10 @@ class Agent:
         validBoard = state.validTotalBoardPower()
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
-                if validBoard and state._board[i][j] is None and state._turn!=343:
+                if validBoard and state._board[i][j] is None and state._turn!=171:
                     possible_moves.append(SpawnAction(HexPos(i, j))) 
                 else:
-                    if state._board[i][j] is not None and state._board[i][j][0]==player and state._turn!=343:
+                    if state._board[i][j] is not None and state._board[i][j][0]==player and state._turn!=171:
                         for d in DIRECTIONS:
                             possible_moves.append(SpreadAction(HexPos(i, j), d))
                     else:
@@ -399,10 +399,10 @@ class Agent:
         validBoard = state.validTotalBoardPower()
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
-                if validBoard and state._board[i][j] is None and state._turn!=343:
+                if validBoard and state._board[i][j] is None and state._turn!=171:
                     possible_moves.append(SpawnAction(HexPos(i, j))) 
                 else:
-                    if state._board[i][j] is not None and state._board[i][j][0]==player and state._turn!=343:
+                    if state._board[i][j] is not None and state._board[i][j][0]==player and state._turn!=171:
                         for d in DIRECTIONS:
                             possible_moves.append(SpreadAction(HexPos(i, j), d))
                     else:
